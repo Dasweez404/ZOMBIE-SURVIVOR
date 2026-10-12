@@ -100,7 +100,10 @@ function moveSpeedMul() {
   const w = invWeight() / invCap(); if (w > .85) m -= (w - .85) * 1.2;
   return Math.max(.6, m);
 }
-function maxHP() { return 100 + P.skills.end * 10 + (P.lvl - 1) * 2; }
+function maxHPBase() { return 100 + P.skills.end * 10 + (P.lvl - 1) * 2; }
+function maxHP() { return Math.max(20, maxHPBase() * (1 - (P.rad || 0) / 160)); }
+function armorWarmth() { let a = 0; for (const s in P.armor) { const g = P.armor[s]; if (g) a += (ARMOR[g.id].warm || 0) * (1 + .1 * (g.lvl - 1)); } return a; }
+function radResist() { let k = 1; for (const s in P.armor) { const g = P.armor[s]; if (g && ARMOR[g.id].rad) k *= 1 - ARMOR[g.id].rad; } if (P.veh && P.veh.def.closed) k *= .5; return 1 - k; }
 function maxStam() { return 100 + P.skills.end * 12; }
 
 // ===== XP / niveaux =====

@@ -126,6 +126,8 @@ function genWorld(seed) {
   scatterObjects(rng);
   spawnAnimals(rng);
   buildStartCamp(rng);
+  genRadZones(rng);
+  genVehicles(rng);
 }
 
 function rectFree(x, y, w, h, margin) {
@@ -425,4 +427,57 @@ function buildStartCamp(rng) {
   p.crates[0].gear = [{ kind: 'w', id: 'pistol' }];
   p.crates[0].loot.a9 = (p.crates[0].loot.a9 || 0) + 24; p.crates[0].loot.bandage = 2;
   G.campfireStart = { tx: sx, ty: sy };
+}
+
+// ===== Zones radioactives =====
+function genRadZones(rng) {
+  G.radZones = []; const fake = { id: -2, crates: [] };
+  for (let k = 0; k < 5; k++) {
+    for (let tries = 0; tries < 800; tries++) {
+      const t = randomLandTile(rng, 20, 64); if (!t) continue;
+      const rt = rng.int(5, 8), tx = t[0], ty = t[1];
+      let ok = true;
+      for (const p of G.pois) if (dist(tx, ty, p.cx / TS, p.cy / TS) < Math.max(p.w, p.h) / 2 + rt + 1) ok = false;
+      for (const z of G.radZones) if (dist(tx, ty, z.x / TS, z.y / TS) < rt + z.r / TS + 4) ok = false;
+      if (!ok) continue;
+      const z = { id: k, x: tx * TS + 16, y: ty * TS + 16, r: rt * TS, p: rng.range(1.6, 2.6), discovered: false };
+      G.radZones.push(z);
+      for (let y = ty - rt; y <= ty + rt; y++) for (let x = tx - rt; x <= tx + rt; x++) {
+        if (!inb(x, y)) continue; const d = Math.hypot(x - tx, y - ty); if (d > rt) continue;
+        const i = IDX(x, y); if (G.reserve[i]) continue;
+        const o = G.objs.get(i); if (o && (o.k === 'tree' || o.k === 'bush' || o.k === 'herb')) removeObj(o);
+        if (G.tiles[i] === T.GRASS || G.tiles[i] === T.FOREST) G.tiles[i] = T.DIRT;
+        if (G.solid[i] === 0 && !G.objs.has(i) && G.tiles[i] !== T.WATER && d > 1.5) {
+          const r = rng.next();
+          if (r < .035) addObj(x, y, 'radbarrel', { solid: 1 }); else if (r < .06) addObj(x, y, 'deadtree'); else if (r < .075) addObj(x, y, 'wreck', { ang: rng.range(0, TAU) });
+        }
+      }
+      for (let c = 0; c < 2; c++) { for (let q = 0; q < 30; q++) { const cx = tx + rng.int(-2, 2), cy = ty + rng.int(-2, 2); if (freeTile(cx, cy)) { addCrate(fake, cx, cy, rng, 'rad', null); break; } } }
+      G.mobsInit.push({ t: 'hound', x: z.x + 60, y: z.y }, { t: 'hound', x: z.x - 60, y: z.y + 40 }); if (rng.chance(.5)) G.mobsInit.push({ t: 'bear', x: z.x, y: z.y - 80 });
+      break;
+    }
+  }
+}
+function radAt(x, y) {
+  let lv = 0;
+  for (const z of G.radZones) { const d = dist(x, y, z.x, z.y); if (d < z.r) lv = Math.max(lv, .5 + (1 - d / z.r) * z.p); }
+  return lv;
+}
+
+// ===== Véhicules =====
+function genVehicles(rng) {
+  G.vehicles = [];
+  const mk = (x, y, fuelFrac) => { const t = rng.wpick([['moto', 40], ['car', 40], ['truck', 20]]); const v = newVehicle(t, x, y); v.ang = rng.range(0, TAU); v.fuel = v.def.fuel * (fuelFrac === undefined ? rng.range(.15, .55) : fuelFrac); v.hp = v.maxhp * rng.range(.5, 1); G.vehicles.push(v); return v; };
+  const okAt = (x, y, r) => !collide(x, y, r, false);
+  // à côté du camp de départ : une moto
+  const sx = G.spawn.x, sy = G.spawn.y;
+  for (let k = 0; k < 40; k++) { const x = sx + rng.range(-160, 160), y = sy + rng.range(100, 220); if (okAt(x, y, 18)) { const v = newVehicle('moto', x, y); v.fuel = v.def.fuel * .3; v.hp = v.maxhp * .8; v.ang = rng.range(0, TAU); G.vehicles.push(v); break; } }
+  // le long des routes
+  let n = 0; for (let tries = 0; tries < 4000 && n < 9; tries++) { const tx = rng.int(4, G.W - 5), ty = rng.int(4, G.H - 5); if (G.tiles[IDX(tx, ty)] !== T.ROAD) continue; const x = tx * TS + 16, y = ty * TS + 16; if (!okAt(x, y, 22)) continue; if (G.vehicles.some(v => dist(v.x, v.y, x, y) < 400)) continue; mk(x, y); n++; }
+  // stations-service et fermes
+  for (const p of G.pois) if ((p.type === 'gas' || p.type === 'farm') && p.front) {
+    for (let k = 0; k < 20; k++) { const x = (p.front.fx + rng.int(-5, 5)) * TS + 16, y = (p.front.fy + rng.int(-5, 5)) * TS + 16; if (okAt(x, y, 22) && !G.vehicles.some(v => dist(v.x, v.y, x, y) < 100)) { mk(x, y); break; } }
+  }
+  // près du village
+  const v0 = G.village; if (v0) for (let k = 0; k < 30; k++) { const x = (v0.front.fx - 4 + rng.int(-2, 2)) * TS, y = (v0.front.fy + rng.int(-4, 4)) * TS; if (okAt(x, y, 22)) { const v = newVehicle('car', x, y); v.fuel = v.def.fuel * .35; v.hp = v.maxhp * .7; G.vehicles.push(v); break; } }
 }

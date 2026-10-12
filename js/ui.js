@@ -40,8 +40,9 @@ function renderPanel() {
     case 'map': body = '<div class="mapwrap"><canvas id="mapCanvas" width="640" height="640"></canvas><div class="legend">' + mapLegend() + '</div></div>'; break;
     case 'base': body = baseHTML(panelCtx); break;
     case 'chest': body = chestHTML(panelCtx); break;
+    case 'veh': body = vehicleHTML(panelCtx); break;
   }
-  el.innerHTML = (mainTabs.includes(panelTab) ? tabsHTML() : '<div class="tabs"><span class="ptitle">' + (panelTab === 'base' ? '🏴 Base' : '🧳 Coffre') + '</span><button class="tab close" data-act="close">✖</button></div>') + '<div class="pbody">' + body + '</div>';
+  el.innerHTML = (mainTabs.includes(panelTab) ? tabsHTML() : '<div class="tabs"><span class="ptitle">' + (panelTab === 'base' ? '🏴 Base' : panelTab === 'veh' ? '🚗 Véhicule' : '🧳 Coffre') + '</span><button class="tab close" data-act="close">✖</button></div>') + '<div class="pbody">' + body + '</div>';
   if (panelTab === 'map') drawFullMap();
 }
 function itemRow(id, n, extra) {
@@ -73,9 +74,9 @@ function invHTML() {
   h += '</div><h3>Armure</h3><div class="list">';
   for (const slot of ['head', 'body', 'feet']) {
     const g = P.armor[slot], nm = { head: 'Tête', body: 'Torse', feet: 'Pieds' }[slot];
-    h += g ? '<div class="item gear"><span class="ic">' + ARMOR[g.id].i + '</span><span class="nm">' + nm + ' : ' + esc(gearName(g)) + '<br><small>Armure ' + (ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1))).toFixed(1) + '</small></span><button class="sm" data-act="unarmor" data-a="' + slot + '">Retirer</button></div>' : '<div class="item empty">' + nm + ' : —</div>';
+    h += g ? '<div class="item gear"><span class="ic">' + ARMOR[g.id].i + '</span><span class="nm">' + nm + ' : ' + esc(gearName(g)) + '<br><small>Armure ' + (ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1))).toFixed(1) + armorExtra(g) + '</small></span><button class="sm" data-act="unarmor" data-a="' + slot + '">Retirer</button></div>' : '<div class="item empty">' + nm + ' : —</div>';
   }
-  h += '<p class="mut">Armure totale : ' + armorValue().toFixed(1) + ' → réduction ' + Math.round(armorValue() / (armorValue() + 30) * 100) + '% des dégâts</p>';
+  h += '<p class="mut">Chaleur : +' + armorWarmth().toFixed(0) + ' · Protection radiation : ' + Math.round(radResist() * 100) + '%</p><p class="mut">Armure totale : ' + armorValue().toFixed(1) + ' → réduction ' + Math.round(armorValue() / (armorValue() + 30) * 100) + '% des dégâts</p>';
   h += '<h3>Réserve d\'équipement</h3><div class="list">';
   if (!P.gear.length) h += '<p class="mut">Aucun équipement en réserve.</p>';
   P.gear.forEach((g, i) => {
@@ -84,6 +85,7 @@ function invHTML() {
   h += '</div></div></div>';
   return h;
 }
+function armorExtra(g) { const a = ARMOR[g.id]; return ' · 🔥 chaleur +' + (a.warm || 0) + (a.rad ? ' · ☢️ -' + Math.round(a.rad * 100) + '% radiation' : ''); }
 function gunStatText(w) {
   const b = WEAPONS[w.id], s = wstat(w);
   if (b.melee) return 'Dégâts ' + s.dmg.toFixed(0) + ' · cadence ' + (1 / s.rate).toFixed(1) + '/s · portée ' + s.range;
@@ -182,11 +184,13 @@ function rewText(r) {
   const p = []; if (r.caps) p.push('🪙' + r.caps); for (const k in (r.items || {})) p.push((ITEMS[k] ? ITEMS[k].i : WEAPONS[k] ? WEAPONS[k].i : ARMOR[k] ? ARMOR[k].i : '') + ' ' + (ITEMS[k] ? ITEMS[k].n : WEAPONS[k] ? WEAPONS[k].n : ARMOR[k].n) + (r.items[k] > 1 ? ' x' + r.items[k] : '')); if (r.rep) p.push('réputation +' + r.rep); if (r.xp) p.push(r.xp + ' XP'); return p.join(' · ');
 }
 function mapLegend() {
-  return '<p>🟡 Vous · <span style="color:#6cf">■</span> alliés · 📦 largage</p><p>Lieux découverts :</p>' + G.pois.filter(p => p.discovered && !p.hidden).map(p => '<div>' + (p.def.icon || '•') + ' ' + esc(p.name) + (p.owned ? ' <b style="color:#6f8">[base niv ' + p.lvl + ']</b>' : p.cleared ? ' <span class="mut">(nettoyé)</span>' : '') + '</div>').join('');
+  return '<p>🟡 Vous · <span style="color:#6cf">■</span> alliés · 📦 largage · 🚗 véhicules · <span style="color:#9aff4a">☢️ zones radioactives</span></p><p>Lieux découverts :</p>' + G.pois.filter(p => p.discovered && !p.hidden).map(p => '<div>' + (p.def.icon || '•') + ' ' + esc(p.name) + (p.owned ? ' <b style="color:#6f8">[base niv ' + p.lvl + ']</b>' : p.cleared ? ' <span class="mut">(nettoyé)</span>' : '') + '</div>').join('');
 }
 function drawFullMap() {
   const cv = $('mapCanvas'); if (!cv) return; const c = cv.getContext('2d'), S = cv.width, k = S / G.W;
   c.fillStyle = '#0a0e12'; c.fillRect(0, 0, S, S); c.imageSmoothingEnabled = false; c.drawImage(G.mini, 0, 0, S, S);
+  for (const z of G.radZones) if (z.discovered) { c.fillStyle = 'rgba(140,255,40,.3)'; c.beginPath(); c.arc(z.x / TS * k, z.y / TS * k, z.r / TS * k, 0, TAU); c.fill(); c.strokeStyle = '#9aff4a'; c.lineWidth = 1.5; c.stroke(); c.font = '14px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText('☢️', z.x / TS * k, z.y / TS * k + 5); }
+  for (const v of G.vehicles) if (G.explored[IDX(Math.floor(v.x / TS), Math.floor(v.y / TS))]) { c.font = '13px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(v.def.i, v.x / TS * k, v.y / TS * k + 4); }
   for (const p of G.pois) if (p.discovered && !p.hidden) mapPoiIcon(c, p, p.cx / TS * k, p.cy / TS * k);
   if (G.airdrop && G.airdrop.o && !G.airdrop.o.opened) { c.font = '18px sans-serif'; c.textAlign = 'center'; c.fillText('📦', G.airdrop.x / TS * k, G.airdrop.y / TS * k); }
   const id = G.quests.tracked; if (id && G.quests.active[id]) { const st = G.quests.active[id], tg = questTargetPos(questDef(id, st), st); if (tg) { c.strokeStyle = '#ffd24a'; c.lineWidth = 3; c.beginPath(); c.arc(tg.x / TS * k, tg.y / TS * k, 14, 0, TAU); c.stroke(); } }
@@ -223,6 +227,7 @@ function chestHTML(s) {
 const TRADE_STOCK = [
   ['i', 'a9', 24, 20], ['i', 'shell', 8, 16], ['i', 'a556', 15, 28], ['i', 'a762', 8, 26], ['i', 'bolt', 10, 12], ['i', 'bandage', 3, 14], ['i', 'medkit', 1, 70], ['i', 'canned', 3, 12], ['i', 'bottle_clean', 3, 10], ['i', 'seed', 5, 8], ['i', 'fuel', 2, 14], ['i', 'grenade', 1, 45], ['i', 'flare', 3, 14],
   ['w', 'pistol', 0, 120], ['w', 'shotgun', 0, 240], ['w', 'smg', 0, 320], ['w', 'hunter', 0, 420], ['a', 'helmet_moto', 0, 80], ['a', 'leather', 0, 100], ['a', 'rangers', 0, 110], ['a', 'kevlar', 0, 260],
+  ['i', 'antirad', 4, 40], ['i', 'fuel', 3, 20], ['a', 'gasmask', 0, 130], ['a', 'hazmat', 0, 260],
   ['i', 'plan_guns', 0, 120], ['i', 'plan_med', 0, 100], ['i', 'plan_turret', 0, 170], ['i', 'plan_fort', 0, 130], ['i', 'plan_armor', 0, 190], ['i', 'plan_optics', 0, 160], ['i', 'plan_serum', 0, 180], ['i', 'plan_fire', 0, 260],
 ];
 function discount() { return P.rep >= 60 ? .8 : P.rep >= 30 ? .9 : 1; }
@@ -299,6 +304,8 @@ const ACT = {
   upbase() { const p = panelCtx; if (p) { upgradeBase(p); renderPanel(); } },
   store(a) { const [k, all] = a.split(':'); const s = panelCtx; const n = all ? P.inv[k] : 1; const t = invTake(k, n); s.stash[k] = (s.stash[k] || 0) + t; SFX.play('click'); renderPanel(); },
   take(a) { const [k, all] = a.split(':'); const s = panelCtx; const n = all ? s.stash[k] : 1; const got = invAdd(k, Math.min(n, s.stash[k])); s.stash[k] -= got; if (s.stash[k] <= 0) delete s.stash[k]; if (!got) msg('Inventaire plein.', '#e0a050'); SFX.play('click'); renderPanel(); },
+  vrepair() { const v = panelCtx; if (!v || !hasItems({ scrap: 4, metal: 1 }) || v.hp >= v.maxhp) return; payItems({ scrap: 4, metal: 1 }); v.hp = Math.min(v.maxhp, v.hp + v.maxhp * .25); SFX.play('build'); renderPanel(); },
+  vfuel(a) { const v = panelCtx; if (!v) return; let n = a === 'all' ? Math.min(invCount('fuel'), Math.ceil((v.maxfuel - v.fuel) / 20)) : 1; n = Math.min(n, invCount('fuel')); if (n <= 0 || v.fuel >= v.maxfuel) return; invTake('fuel', n); v.fuel = Math.min(v.maxfuel, v.fuel + 20 * n); SFX.play('drink'); renderPanel(); },
   accept(a) { const q = QUESTS.find(x => x.id === a); if (q) { acceptQuest(q); renderDialog(); } },
   contract() { acceptQuest(makeContract()); renderDialog(); },
   turnin(a) { const st = G.quests.active[a], q = st && questDef(a, st); if (q) { checkQuests(); if (questComplete(q, st)) completeQuest(q); } renderDialog(); },

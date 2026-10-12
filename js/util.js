@@ -78,7 +78,7 @@ const SFX = {
     const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
     s.connect(f); f.connect(g); g.connect(this.master); s.start(t, Math.random()); s.stop(t + dur + .02);
   },
-  play(n, vol = 1) {
+  play(n, vol = 1, extra) {
     if (!this.on || !this.ctx) return;
     const now = performance.now();
     if (this.last[n] && now - this.last[n] < 35) return;
@@ -108,6 +108,7 @@ const SFX = {
       case 'alarm': this.tone('square', 600, 600, .15, .15 * v); this.tone('square', 450, 450, .15, .15 * v, .2); this.tone('square', 600, 600, .15, .15 * v, .4); break;
       case 'eat': this.noise(.12, .2 * v, 900, 300); this.noise(.12, .2 * v, 900, 300, .15); break;
       case 'drink': this.noise(.3, .15 * v, 1200, 400); break;
+      case 'engine': this.tone('sawtooth', 48 + (extra || 0) * 70, 40 + (extra || 0) * 60, .13, .09 * v); break;
       case 'zdie': this.tone('sawtooth', 150, 40, .4, .15 * v); break;
     }
   }

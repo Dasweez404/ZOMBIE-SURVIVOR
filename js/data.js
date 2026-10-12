@@ -18,11 +18,11 @@ const ITEMS = {
   medsupply: { n: 'Fournitures médicales', i: '📦', w: .3, v: 10, t: 'res' },
   // Nourriture / boisson
   rawmeat: { n: 'Viande crue', i: '🥩', w: .3, v: 4, t: 'food', use: { hun: 14, sick: .4 } },
-  cooked:  { n: 'Viande cuite', i: '🍖', w: .3, v: 10, t: 'food', use: { hun: 38, hp: 4 } },
+  cooked:  { n: 'Viande cuite', i: '🍖', w: .3, v: 10, t: 'food', use: { hun: 38, hp: 4, temp: 5 } },
   berries: { n: 'Baies', i: '🫐', w: .05, v: 2, t: 'food', use: { hun: 8, thi: 5 } },
   veg:     { n: 'Légumes', i: '🥕', w: .1, v: 4, t: 'food', use: { hun: 20 } },
   canned:  { n: 'Conserve', i: '🥫', w: .3, v: 8, t: 'food', use: { hun: 42 } },
-  stew:    { n: 'Ragoût', i: '🍲', w: .4, v: 18, t: 'food', use: { hun: 55, thi: 15, hp: 12 } },
+  stew:    { n: 'Ragoût', i: '🍲', w: .4, v: 18, t: 'food', use: { hun: 55, thi: 15, hp: 12, temp: 14 } },
   bottle_dirty: { n: 'Eau non potable', i: '🥤', w: .4, v: 1, t: 'drink', use: { thi: 30, sick: .35 } },
   bottle_clean: { n: 'Eau propre', i: '🚰', w: .4, v: 6, t: 'drink', use: { thi: 55 } },
   soda:    { n: 'Soda', i: '🧃', w: .3, v: 7, t: 'drink', use: { thi: 28, hun: 6, stam: 40 } },
@@ -31,6 +31,7 @@ const ITEMS = {
   painkiller: { n: 'Antidouleur', i: '💊', w: .05, v: 12, t: 'med', use: { hp: 30 } },
   antibio: { n: 'Antibiotiques', i: '💉', w: .05, v: 25, t: 'med', use: { hp: 10, cure: ['infect', 'sick'] } },
   medkit:  { n: 'Trousse de soins', i: '🧰', w: .5, v: 40, t: 'med', use: { hp: 70, cure: ['bleed'] } },
+  antirad: { n: 'Anti-radiations', i: '🟢', w: .05, v: 30, t: 'med', use: { rad: -45 } },
   serum:   { n: 'Sérum d\'apprivoisement', i: '🧬', w: .1, v: 50, t: 'bait' },
   // Munitions
   a9:    { n: 'Balles 9mm', i: '🔸', w: .02, v: 1, t: 'ammo' },
@@ -93,15 +94,17 @@ const MOD_EFFECT = {
 
 // ===== Armures =====
 const ARMOR = {
-  cap:        { n: 'Casquette renforcée', i: '🧢', slot: 'head', ar: 1, v: 10 },
-  helmet_moto:{ n: 'Casque de moto', i: '⛑️', slot: 'head', ar: 3, v: 40 },
-  helmet_mil: { n: 'Casque militaire', i: '🪖', slot: 'head', ar: 5, v: 100 },
-  jacket:     { n: 'Veste en tissu', i: '🧥', slot: 'body', ar: 2, v: 15 },
-  leather:    { n: 'Veste en cuir', i: '🥼', slot: 'body', ar: 4, v: 45 },
-  kevlar:     { n: 'Gilet Kevlar', i: '🦺', slot: 'body', ar: 8, v: 150 },
-  plate:      { n: 'Plaques militaires', i: '🛡️', slot: 'body', ar: 12, v: 280 },
-  shoes:      { n: 'Chaussures de rando', i: '👟', slot: 'feet', ar: 1, spd: .04, v: 20 },
-  rangers:    { n: 'Rangers', i: '🥾', slot: 'feet', ar: 3, spd: .06, v: 70 },
+  cap:        { n: 'Casquette renforcée', i: '🧢', slot: 'head', ar: 1, warm: 3, v: 10 },
+  helmet_moto:{ n: 'Casque de moto', i: '⛑️', slot: 'head', ar: 3, warm: 2, v: 40 },
+  helmet_mil: { n: 'Casque militaire', i: '🪖', slot: 'head', ar: 5, warm: 2, v: 100 },
+  jacket:     { n: 'Veste en tissu', i: '🧥', slot: 'body', ar: 2, warm: 8, v: 15 },
+  leather:    { n: 'Veste en cuir', i: '🥼', slot: 'body', ar: 4, warm: 12, v: 45 },
+  kevlar:     { n: 'Gilet Kevlar', i: '🦺', slot: 'body', ar: 8, warm: 5, v: 150 },
+  plate:      { n: 'Plaques militaires', i: '🛡️', slot: 'body', ar: 12, warm: 4, v: 280 },
+  gasmask:    { n: 'Masque à gaz', i: '😷', slot: 'head', ar: 2, warm: 1, rad: .35, v: 90 },
+  hazmat:     { n: 'Combinaison NRBC', i: '👨‍🚀', slot: 'body', ar: 3, warm: 6, rad: .75, v: 200 },
+  shoes:      { n: 'Chaussures de rando', i: '👟', slot: 'feet', ar: 1, warm: 3, spd: .04, v: 20 },
+  rangers:    { n: 'Rangers', i: '🥾', slot: 'feet', ar: 3, warm: 5, spd: .06, v: 70 },
 };
 
 // ===== Structures constructibles =====
@@ -141,6 +144,7 @@ const RECIPES = [
   R('Cuisine', 'Ragoût', 'i:stew:1', { rawmeat: 1, veg: 1, bottle_clean: 1 }, 'campfire'),
   R('Soins', 'Antidouleur', 'i:painkiller:2', { herb: 2, chem: 1 }, 'workbench'),
   R('Soins', 'Antibiotiques', 'i:antibio:1', { herb: 3, chem: 2 }, 'workbench', 'plan_med'),
+  R('Soins', 'Anti-radiations (x2)', 'i:antirad:2', { herb: 3, chem: 2 }, 'workbench', 'plan_med'),
   R('Soins', 'Trousse de soins', 'i:medkit:1', { bandage: 3, herb: 2, chem: 1 }, 'workbench', 'plan_med'),
   R('Soins', 'Sérum d\'apprivoisement', 'i:serum:2', { herb: 4, chem: 3, rawmeat: 1 }, 'workbench', 'plan_serum'),
   R('Munitions', 'Poudre (x3)', 'i:powder:3', { chem: 1, scrap: 1 }, 'workbench'),
@@ -163,6 +167,8 @@ const RECIPES = [
   R('Armure', 'Veste en cuir', 'a:leather', { hide: 6, cloth: 4 }, 'workbench'),
   R('Armure', 'Casque de moto', 'a:helmet_moto', { metal: 3, cloth: 2, scrap: 2 }, 'workbench'),
   R('Armure', 'Rangers', 'a:rangers', { hide: 5, metal: 2, cloth: 2 }, 'workbench'),
+  R('Armure', 'Masque à gaz', 'a:gasmask', { metal: 3, cloth: 3, chem: 2 }, 'workbench', 'plan_armor'),
+  R('Armure', 'Combinaison NRBC', 'a:hazmat', { cloth: 14, chem: 6, hide: 3, scrap: 4 }, 'workbench', 'plan_armor'),
   R('Armure', 'Gilet Kevlar', 'a:kevlar', { cloth: 10, metal: 8, hide: 4 }, 'workbench', 'plan_armor'),
   R('Gadgets', 'Pétard leurre (x2)', 'i:cracker:2', { powder: 1, cloth: 1 }, 'workbench'),
   R('Gadgets', 'Fusée éclairante (x2)', 'i:flare:2', { chem: 1, cloth: 1 }, 'workbench'),
@@ -214,12 +220,13 @@ const LOOT = {
   farm:     [['veg', 6, 2, 5], ['seed', 5, 3, 5], ['berries', 3, 3, 6], ['rawmeat', 3, 1, 2], ['wood', 4, 3, 6], ['hide', 2, 1, 2], ['shell', 3, 3, 8], ['bottle_clean', 3, 1, 2], ['caps', 2, 3, 10]],
   market:   [['canned', 8, 2, 4], ['soda', 6, 1, 3], ['bottle_clean', 6, 1, 3], ['cooked', 3, 1, 2], ['veg', 3, 1, 3], ['cloth', 3, 2, 4], ['bandage', 3, 1, 2], ['caps', 3, 5, 20]],
   police:   [['a9', 8, 8, 20], ['shell', 5, 4, 10], ['bandage', 4, 1, 3], ['metal', 3, 1, 3], ['elec', 3, 1, 2], ['a556', 3, 6, 14], ['painkiller', 3, 1, 2], ['caps', 4, 8, 25]],
-  hospital: [['bandage', 7, 2, 4], ['painkiller', 5, 1, 3], ['antibio', 3, 1, 2], ['medkit', 3, 1, 1], ['herb', 3, 1, 3], ['chem', 6, 1, 3], ['cloth', 4, 3, 6], ['caps', 3, 8, 22]],
+  hospital: [['antirad', 3, 1, 2], ['bandage', 7, 2, 4], ['painkiller', 5, 1, 3], ['antibio', 3, 1, 2], ['medkit', 3, 1, 1], ['herb', 3, 1, 3], ['chem', 6, 1, 3], ['cloth', 4, 3, 6], ['caps', 3, 8, 22]],
   warehouse:[['scrap', 8, 3, 8], ['metal', 6, 2, 5], ['elec', 4, 1, 3], ['wood', 4, 3, 8], ['cloth', 4, 3, 6], ['fuel', 3, 1, 3], ['chem', 3, 1, 3], ['powder', 3, 2, 5], ['caps', 3, 8, 25]],
   bunker:   [['a556', 7, 10, 24], ['a762', 6, 6, 14], ['metal', 5, 3, 7], ['elec', 5, 2, 4], ['medkit', 4, 1, 2], ['grenade', 3, 1, 3], ['mine', 2, 1, 2], ['powder', 4, 3, 7], ['chem', 3, 2, 4], ['caps', 4, 20, 60]],
   camp:     [['a9', 6, 8, 20], ['shell', 5, 4, 10], ['canned', 4, 1, 3], ['molotov', 3, 1, 2], ['scrap', 5, 2, 5], ['metal', 3, 1, 3], ['bandage', 3, 1, 3], ['soda', 3, 1, 2], ['caps', 6, 10, 40]],
   legion:   [['a556', 7, 12, 30], ['a762', 5, 6, 16], ['medkit', 3, 1, 2], ['grenade', 4, 1, 3], ['metal', 5, 3, 7], ['elec', 4, 2, 4], ['canned', 3, 2, 4], ['caps', 6, 25, 70]],
   radio:    [['elec', 7, 3, 7], ['metal', 5, 2, 5], ['scrap', 5, 3, 7], ['chem', 3, 1, 3], ['caps', 3, 10, 30]],
+  rad:      [['elec', 6, 2, 5], ['chem', 7, 2, 5], ['metal', 5, 2, 6], ['antirad', 4, 1, 3], ['medkit', 3, 1, 1], ['a762', 3, 6, 14], ['fuel', 3, 1, 3], ['caps', 5, 30, 90]],
   airdrop:  [['a556', 6, 12, 30], ['a762', 4, 8, 16], ['medkit', 5, 1, 3], ['grenade', 4, 2, 4], ['metal', 5, 4, 8], ['elec', 4, 2, 5], ['canned', 4, 3, 6], ['bottle_clean', 4, 2, 4], ['suppr', 1, 1, 1], ['scope', 1, 1, 1], ['caps', 5, 30, 80]],
 };
 const RARE_LOOT = { // armes / armures / plans trouvables (type, id, poids)
@@ -235,6 +242,7 @@ const RARE_LOOT = { // armes / armures / plans trouvables (type, id, poids)
   camp: [['w', 'shotgun', 3], ['w', 'smg', 2], ['w', 'machete', 2], ['a', 'leather', 2], ['m', 'suppr', 1], ['p', 'plan_guns', 1]],
   legion: [['w', 'ar', 4], ['w', 'hunter', 3], ['a', 'helmet_mil', 3], ['a', 'plate', 2], ['m', 'scope', 2], ['m', 'suppr', 2], ['m', 'laser', 2], ['p', 'plan_armor', 2]],
   radio: [['m', 'scope', 2], ['m', 'laser', 2], ['p', 'plan_optics', 2]],
+  rad: [['a', 'hazmat', 3], ['a', 'gasmask', 3], ['a', 'kevlar', 2], ['w', 'hunter', 2], ['m', 'scope', 2], ['m', 'suppr', 2], ['p', 'plan_armor', 2]],
   airdrop: [['w', 'ar', 3], ['w', 'hunter', 2], ['a', 'kevlar', 2], ['a', 'helmet_mil', 2], ['w', 'flamer', 1]],
 };
 
@@ -291,6 +299,7 @@ const QUESTS = [
   { id: 'q_optics', giver: 'jonas', req: ['q_scrap'], title: 'Composants rares', desc: 'Jonas cherche 8 composants électroniques et 4 produits chimiques (entrepôts, stations-service, hôpital).', objs: [{ t: 'have', item: 'elec', n: 8 }, { t: 'have', item: 'chem', n: 4 }], rew: { items: { plan_optics: 1 }, caps: 60, rep: 8, xp: 80 } },
   { id: 'q_radio', giver: 'mara', req: ['q_camp'], title: 'Signal radio', desc: 'Atteins la tour radio, élimine ce qui rôde autour et réactive l\'émetteur (E). Cela révélera la carte.', objs: [{ t: 'radio' }], rew: { items: { elec: 6, flare: 3 }, caps: 150, rep: 20, xp: 200 } },
   { id: 'q_legion', giver: 'mara', req: ['q_camp', 'q_radio'], title: 'La Légion rouge', desc: 'Une milice militaire s\'est installée plus loin. Détruis son avant-poste et tue son commandant.', objs: [{ t: 'clear', poi: 'legion' }], rew: { items: { ar: 1, helmet_mil: 1, a556: 60 }, caps: 250, rep: 30, xp: 400 } },
+  { id: 'q_drive', giver: 'jonas', req: ['q_scrap'], title: 'Sur la route', desc: 'Trouve un véhicule (routes, stations-service ; cherche du carburant) et parcours 600 mètres au volant.', objs: [{ t: 'drive', n: 600 }], rew: { items: { fuel: 4, scrap: 15 }, caps: 60, rep: 6, xp: 90 } },
   { id: 'q_night', giver: 'mara', req: ['q_build'], title: 'La longue nuit', desc: 'Survis jusqu\'au jour 8 avec une base de niveau 3.', objs: [{ t: 'survive', day: 8 }, { t: 'baselvl', n: 3 }], rew: { items: { plan_fire: 1, kevlar: 1, medkit: 3 }, caps: 300, rep: 25, xp: 300 } },
   { id: 'q_bunker', giver: 'mara', req: ['q_legion'], title: 'Le Bunker', desc: 'Les militaires ont laissé un bunker bourré d\'armes. Prends-le et nettoie-le.', objs: [{ t: 'clear', poi: 'bunker' }], rew: { items: { plate: 1, hunter: 1, a762: 30 }, caps: 400, rep: 30, xp: 500 } },
   { id: 'q_allies', giver: 'mara', req: ['q_claim'], title: 'Constituer une garnison', desc: 'Recrute 2 gardes auprès de Mara (réputation 30 requise, 60 capsules l\'unité).', objs: [{ t: 'recruit', n: 2 }], rew: { items: { medkit: 2, a556: 40 }, caps: 100, rep: 15, xp: 150 } },

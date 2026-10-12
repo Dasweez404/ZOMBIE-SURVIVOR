@@ -6,7 +6,7 @@ function newPlayer() {
     x: G.spawn.x, y: G.spawn.y, r: 12, hp: 100, hun: 100, thi: 100, stam: 100, ang: 0, vx: 0, vy: 0,
     inv: {}, gear: [], slots: [null, null, null, null, null], sel: 0, armor: { head: null, body: null, feet: null }, pack: 0,
     known: {}, skills: { str: 0, end: 0, aim: 0, craft: 0, hunt: 0, carry: 0 }, sp: 0, lvl: 1, xp: 0,
-    bleed: 0, infect: 0, sick: 0, burn: 0, painT: 0, cd: 0, reload: 0, reloading: false, bloom: 0, swing: 0, swingA: 0, hurtT: 0,
+    bleed: 0, infect: 0, sick: 0, temp: 50, rad: 0, veh: null, burn: 0, painT: 0, cd: 0, reload: 0, reloading: false, bloom: 0, swing: 0, swingA: 0, hurtT: 0,
     gadSel: 0, gadCd: 0, rep: 0, dead: false, flashT: 0, useCd: 0, noiseT: 0, sprint: false, moving: false, healCd: 0, mealCd: 0, lastHurt: -99,
   };
   return p;
@@ -138,7 +138,7 @@ function updateUndead(m, dt) {
       if (d < 40) zombieStrike(m, tgt, dt); return;
     }
     if (def.boss) bossLogic(m, tgt, d, dt);
-    const reach = m.r + (tgt === P ? P.r : tgt.r) + 6;
+    const reach = m.r + (tgt === P ? (P.veh ? P.veh.def.r : P.r) : tgt.r) + 6;
     if (d > reach) steer(m, tgt.x, tgt.y, m.spd * (m.charge > 0 ? 3 : 1), dt);
     else { m.aang = ang(m.x, m.y, tgt.x, tgt.y); zombieStrike(m, tgt, dt); }
     breakStructs(m, dt);

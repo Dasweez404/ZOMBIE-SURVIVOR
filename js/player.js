@@ -5,22 +5,26 @@ function updatePlayer(dt) {
   const k = G.keys;
   let ix = (k.d ? 1 : 0) - (k.a ? 1 : 0), iy = (k.s ? 1 : 0) - (k.w ? 1 : 0);
   const il = Math.hypot(ix, iy); if (il > 0) { ix /= il; iy /= il; }
-  P.moving = il > 0;
+  P.moving = il > 0 && !P.veh;
   const wantSprint = k.shift && P.moving && P.stam > 2 && !P.exhausted;
   P.sprint = wantSprint;
   const aiming = G.rmb;
-  let sp = 138 * moveSpeedMul() * (P.sprint ? 1.6 : 1) * (aiming ? .82 : 1);
-  if (G.tiles[IDX(Math.floor(P.x / TS), Math.floor(P.y / TS))] === T.ROAD) sp *= 1.06;
-  if (P.infect) sp *= .92;
-  moveEnt(P, (ix * sp + P.vx) * dt, (iy * sp + P.vy) * dt, true);
-  P.vx *= Math.max(0, 1 - dt * 8); P.vy *= Math.max(0, 1 - dt * 8);
-  if (P.sprint) { P.stam -= 22 * dt; P.staRegenT = .7; if (P.stam <= 0) { P.stam = 0; P.exhausted = true; } }
-  else { P.staRegenT = (P.staRegenT || 0) - dt; if (P.staRegenT <= 0) P.stam = Math.min(maxStam(), P.stam + (P.hun > 15 ? 20 : 8) * dt); if (P.exhausted && P.stam > 25) P.exhausted = false; }
+  const coldM = P.temp < 30 ? .93 : 1;
+  if (P.veh) { driveVehicle(dt); P.stam = Math.min(maxStam(), P.stam + 15 * dt); }
+  else {
+    let sp = 138 * moveSpeedMul() * coldM * (P.sprint ? 1.6 : 1) * (aiming ? .82 : 1);
+    if (G.tiles[IDX(Math.floor(P.x / TS), Math.floor(P.y / TS))] === T.ROAD) sp *= 1.06;
+    if (P.infect) sp *= .92;
+    moveEnt(P, (ix * sp + P.vx) * dt, (iy * sp + P.vy) * dt, true);
+    P.vx *= Math.max(0, 1 - dt * 8); P.vy *= Math.max(0, 1 - dt * 8);
+    if (P.sprint) { P.stam -= 22 * dt; P.staRegenT = .7; if (P.stam <= 0) { P.stam = 0; P.exhausted = true; } }
+    else { P.staRegenT = (P.staRegenT || 0) - dt; if (P.staRegenT <= 0) P.stam = Math.min(maxStam(), P.stam + (P.hun > 15 ? 20 : 8) * (P.temp < 30 ? .5 : P.temp > 80 ? .6 : 1) * dt); if (P.exhausted && P.stam > 25) P.exhausted = false; }
+  }
   P.ang = Math.atan2(G.mouse.y - P.y, G.mouse.x - P.x);
 
   // bruit des pas
   P.noiseT -= dt;
-  if (P.noiseT <= 0 && P.moving) { P.noiseT = .6; makeNoise(P.x, P.y, P.sprint ? 230 : 95, true); }
+  if (P.noiseT <= 0 && P.moving && !P.veh) { P.noiseT = .6; makeNoise(P.x, P.y, P.sprint ? 230 : 95, true); }
 
   // timers
   P.cd -= dt; P.gadCd -= dt; P.useCd -= dt; P.healCd -= dt;
@@ -36,7 +40,7 @@ function updatePlayer(dt) {
     const s = wstat(w);
     if (G.lmbEdge) G.edgeT = .12;
     if (G.lmb && P.cd <= 0 && !P.reloading && !G.buildMode) {
-      if (s.melee) meleeSwing(w, s);
+      if (s.melee) { if (!P.veh) meleeSwing(w, s); }
       else if (s.auto || G.edgeT > 0) fireGun(w, s);
     }
   }
@@ -146,16 +150,32 @@ function survivalTick(dt) {
   if (P.dead) return;
   const dm = difficultyMul(), endm = 1 - .06 * P.skills.end;
   const sickM = P.sick > 0 ? 1.8 : 1;
+  const hotM = P.temp > 80 ? 1.8 : 1;
   P.hun = Math.max(0, P.hun - .068 * dm.hun * endm * sickM * dt * (P.sprint ? 1.5 : 1));
-  P.thi = Math.max(0, P.thi - .105 * dm.hun * endm * sickM * dt * (P.sprint ? 1.6 : 1));
+  P.thi = Math.max(0, P.thi - .105 * dm.hun * endm * sickM * hotM * dt * (P.sprint ? 1.6 : 1));
   const starving = P.hun <= 0 || P.thi <= 0;
   if (starving) { P.starveT = (P.starveT || 0) - dt; if (P.starveT <= 0) { P.starveT = 1; hurtPlayer(2, { pure: true, cause: P.thi <= 0 ? 'la soif' : 'la faim' }); } }
   if (P.bleed) { P.bleedT = (P.bleedT || 0) - dt; if (P.bleedT <= 0) { P.bleedT = 1; hurtPlayer(1.6, { pure: true, cause: 'une hémorragie' }); addDecal(P.x, P.y, rnd(2, 4), '#8a1010'); } }
   if (P.infect) { P.infT = (P.infT || 0) - dt; if (P.infT <= 0) { P.infT = 2; hurtPlayer(1.2, { pure: true, cause: 'l\'infection' }); } }
   if (P.sick > 0) { P.sick -= dt; P.sickT = (P.sickT || 0) - dt; if (P.sickT <= 0) { P.sickT = 3; hurtPlayer(1, { pure: true, cause: 'une intoxication' }); } }
+  // température
+  const target = 50 + ambientTemp() + armorWarmth();
+  P.temp = clamp(P.temp + (target - P.temp) * Math.min(1, .035 * dt), 0, 100);
+  if (P.temp < 15 || P.temp > 93) { P.tempT = (P.tempT || 0) - dt; if (P.tempT <= 0) { P.tempT = 1; hurtPlayer(1.3, { pure: true, cause: P.temp < 15 ? 'le froid' : 'la chaleur' }); } }
+  if (P.temp < 30 && !P.coldWarn) { msg('🥶 Vous avez froid ! Approchez-vous d\'un feu, couvrez-vous.', '#8ac8ff'); P.coldWarn = true; } if (P.temp > 38) P.coldWarn = false;
+  if (P.temp > 80 && !P.hotWarn) { msg('🥵 Il fait très chaud ! Cherchez l\'ombre/les bâtiments, enlevez des couches, buvez.', '#ff9a6a'); P.hotWarn = true; } if (P.temp < 72) P.hotWarn = false;
+  // radiations
+  const rl = radAt(P.x, P.y), res = radResist(); G.radLv = rl * (1 - res);
+  if (rl > 0) {
+    P.rad = Math.min(100, P.rad + rl * (1 - res) * dt);
+    if (!P.radWarn) { msg('☢️ ZONE RADIOACTIVE ! Combinaison NRBC/masque à gaz requis, ou quittez la zone.', '#9aff4a'); SFX.play('alarm', .5); P.radWarn = true; }
+    if (Math.random() < dt * (G.radLv + .4) * 5) SFX.play('click', .3 + Math.min(.4, G.radLv * .15));
+  } else { P.rad = Math.max(0, P.rad - .03 * dt); if (P.radWarn && rl === 0) P.radWarn = false; }
+  if (P.rad > 85) { P.radT = (P.radT || 0) - dt; if (P.radT <= 0) { P.radT = 1; hurtPlayer(2, { pure: true, cause: 'les radiations' }); } }
+  if (P.rad >= 100) gameOver('les radiations');
   // régénération
   let reg = 0;
-  if (P.hun > 55 && P.thi > 55 && !P.bleed && !P.infect && G.clock - P.lastHurt > 4) reg = .35;
+  if (P.hun > 55 && P.thi > 55 && !P.bleed && !P.infect && P.temp > 20 && P.temp < 88 && G.clock - P.lastHurt > 4) reg = .35;
   const b = baseAt(P.x, P.y); if (b && !starving) reg += BASE_LEVELS[b.lvl].regen;
   if (reg > 0 && P.hp < maxHP()) P.hp = Math.min(maxHP(), P.hp + reg * dt);
   if (P.hp > maxHP()) P.hp = maxHP();
@@ -165,15 +185,35 @@ function survivalTick(dt) {
   if (P.burn > 0) { const t = G.tiles; for (const [ox, oy] of [[20, 0], [-20, 0], [0, 20], [0, -20]]) if (t[IDX(Math.floor((P.x + ox) / TS), Math.floor((P.y + oy) / TS))] === T.WATER) P.burn = 0; }
 }
 
+function ambientTemp() {
+  const tx = Math.floor(P.x / TS), ty = Math.floor(P.y / TS), t = G.tiles[IDX(tx, ty)];
+  const dayB = { [T.GRASS]: 6, [T.FOREST]: 0, [T.SAND]: 18, [T.DIRT]: 14, [T.ROAD]: 8, [T.FLOOR]: 8, [T.CONC]: 6 }[t] || 4;
+  const nightB = { [T.GRASS]: -26, [T.FOREST]: -22, [T.SAND]: -36, [T.DIRT]: -34, [T.ROAD]: -26, [T.FLOOR]: -22, [T.CONC]: -26 }[t] || -26;
+  let a = lerp(dayB, nightB, clamp(G.dark / .8, 0, 1));
+  for (const b of G.buildings) if (P.x > b.x * TS && P.x < (b.x + b.w) * TS && P.y > b.y * TS && P.y < (b.y + b.h) * TS) { a = a * .5 + 8; break; }
+  let fire = 0;
+  for (const s of G.structs.values()) if (s.type === 'campfire') { const d = dist(P.x, P.y, s.x, s.y); if (d < 170) fire = Math.max(fire, 1 - d / 170); }
+  if (!G.fireObjs) G.fireObjs = [...G.objs.values()].filter(o => o.k === 'fire');
+  for (const o of G.fireObjs) { const d = dist(P.x, P.y, o.x, o.y); if (d < 170) fire = Math.max(fire, 1 - d / 170); }
+  for (const g of G.fires) { const d = dist(P.x, P.y, g.x, g.y); if (d < g.r + 120) fire = Math.max(fire, .8); }
+  a += fire * 32;
+  if (P.veh) a += 12;
+  if (radAt(P.x, P.y) > 0) a += 4;
+  return a;
+}
+function tempLabel() { return P.temp < 15 ? 'Gelé' : P.temp < 30 ? 'Froid' : P.temp > 93 ? 'Hyperthermie' : P.temp > 80 ? 'Chaud' : 'Confortable'; }
+
 function useConsumable(id) {
   const it = ITEMS[id]; if (!it || invCount(id) < 1) return false;
   const u = it.use; if (!u) return false;
   if (it.t === 'med' && P.healCd > 0) return false;
   if (u.hp && P.hp >= maxHP() && !u.cure) { msg('Vous êtes en pleine forme.', '#aaa'); return false; }
-  if (it.t === 'med' && !(u.hp && P.hp < maxHP()) && !(u.cure && u.cure.some(c => P[c === 'bleed' ? 'bleed' : c === 'infect' ? 'infect' : 'sick']))) { msg('Aucun effet nécessaire.', '#aaa'); return false; }
+  if (it.t === 'med' && !(u.rad && P.rad > 0) && !(u.hp && P.hp < maxHP()) && !(u.cure && u.cure.some(c => P[c === 'bleed' ? 'bleed' : c === 'infect' ? 'infect' : 'sick']))) { msg('Aucun effet nécessaire.', '#aaa'); return false; }
   invTake(id, 1);
   if (u.hun) P.hun = Math.min(100, P.hun + u.hun);
   if (u.thi) P.thi = Math.min(100, P.thi + u.thi);
+  if (u.rad) { P.rad = Math.max(0, P.rad + u.rad); addText(P.x, P.y - 24, '☢ ' + u.rad, '#9aff4a'); }
+  if (u.temp) P.temp = Math.min(100, P.temp + u.temp);
   if (u.stam) P.stam = Math.min(maxStam(), P.stam + u.stam);
   if (u.hp) { P.hp = Math.min(maxHP(), P.hp + u.hp); addText(P.x, P.y - 24, '+' + u.hp, '#7cff7c'); }
   if (u.cure) for (const c of u.cure) { if (c === 'bleed') P.bleed = 0; if (c === 'infect') P.infect = 0; if (c === 'sick') P.sick = 0; }
@@ -183,6 +223,7 @@ function useConsumable(id) {
   return true;
 }
 function quickHeal() {
+  if (P.rad > 25 && invCount('antibio') + invCount('antirad') > 0 && invCount('antirad')) return useConsumable('antirad');
   if (P.bleed || P.hp < 70) {
     if (P.bleed && invCount('bandage')) return useConsumable('bandage');
     if (P.hp < 45 && invCount('medkit')) return useConsumable('medkit');
@@ -219,6 +260,7 @@ function collectPickups(dt) {
 
 // ---------- Interactions ----------
 function findInteract() {
+  if (P.veh) return { t: 'exitveh', text: 'Descendre — X : entretien/coffre (⛽ ' + Math.round(P.veh.fuel) + '/' + P.veh.maxfuel + ')' };
   let best = null, bd = 1e9;
   const consider = (d, o) => { if (d < bd) { bd = d; best = o; } };
   const cx = Math.floor(P.x / TS), cy = Math.floor(P.y / TS);
@@ -241,6 +283,7 @@ function findInteract() {
   for (const p of G.pois) {
     if (p.flag && !p.hidden && p.def.claim) { const d = dist(P.x, P.y, p.flag.x, p.flag.y); if (d < 58) consider(d, { t: 'flag', p, text: p.owned ? 'Gérer la base : ' + p.name : 'Prendre possession : ' + p.name }); }
   }
+  for (const v of G.vehicles) { const d = dist(P.x, P.y, v.x, v.y); if (d < v.def.r + 52) consider(d - 24, { t: 'veh', v, text: 'Monter : ' + v.def.n + ' (⛽ ' + Math.round(v.fuel) + '/' + v.maxfuel + ', ❤ ' + Math.round(v.hp / v.maxhp * 100) + '%) — X : entretien' }); }
   for (const n of G.npcs) { const d = dist(P.x, P.y, n.x, n.y); if (d < 70) consider(d - 8, { t: 'npc', n, text: 'Parler à ' + n.name }); }
   for (const m of G.mobs) {
     if (m.dead || !m.def.tame) continue; const d = dist(P.x, P.y, m.x, m.y);
@@ -279,6 +322,8 @@ function interact() {
     }
     case 'recruit': { const f = it.f; const b = nearestOwnedBase(); if (f.mode === 'guard') { f.mode = 'follow'; msg(f.name + ' vous suit.', '#cde'); } else if (b) { f.mode = 'guard'; f.base = b.id; msg(f.name + ' garde ' + b.name + '.', '#cde'); } else msg('Vous n\'avez pas de base à faire garder.', '#e0a050'); SFX.play('ui'); break; }
     case 'water': drinkWater(); break;
+    case 'veh': enterVehicle(it.v); break;
+    case 'exitveh': exitVehicle(); break;
   }
 }
 function nearestOwnedBase() { let b = null, bd = 1e9; for (const p of G.pois) if (p.owned) { const d = dist(P.x, P.y, p.cx, p.cy); if (d < bd) { bd = d; b = p; } } return b; }
@@ -352,6 +397,7 @@ function updateExploration() {
   const tx = Math.floor(P.x / TS), ty = Math.floor(P.y / TS);
   if (tx === G.lastExpX && ty === G.lastExpY) return; G.lastExpX = tx; G.lastExpY = ty;
   revealAround(tx, ty, 15);
+  for (const z of G.radZones) if (!z.discovered && dist(P.x, P.y, z.x, z.y) < z.r + 15 * TS) { z.discovered = true; msg('☢️ Zone radioactive repérée sur la carte.', '#9aff4a'); }
   for (const p of G.pois) if (!p.discovered && dist(P.x, P.y, p.cx, p.cy) < 16 * TS) { p.discovered = true; if (!p.hidden) { msg('Découvert : ' + p.name, '#a0d0ff'); } }
 }
 function revealAround(tx, ty, R) {

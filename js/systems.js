@@ -31,6 +31,7 @@ function objProgress(o, st) {
     case 'baselvl': return { cur: Math.max(0, ...G.pois.filter(p => p.owned).map(p => p.lvl)), need: o.n, text: 'Base de niveau ' + o.n };
     case 'tame': return { cur: G.friends.filter(f => f.kind === 'pet' && !f.dead).length, need: o.n, text: 'Apprivoiser un animal' };
     case 'recruit': return { cur: G.friends.filter(f => f.kind === 'recruit' && !f.dead).length, need: o.n, text: 'Recruter des gardes' };
+    case 'drive': return { cur: Math.min(o.n, Math.floor((G.stats.driven || 0) / 16)), need: o.n, text: 'Parcourir ' + o.n + ' m en véhicule' };
     case 'radio': return { cur: G.radioOn ? 1 : 0, need: 1, text: 'Réactiver la tour radio' };
   }
   return { cur: 0, need: 1, text: '?' };
@@ -286,6 +287,12 @@ function updateEvents(dt) {
   updateAssault(dt);
 }
 
+function updateRadFx(dt) {
+  for (const z of G.radZones) {
+    if (dist(z.x, z.y, P.x, P.y) > z.r + 700) continue;
+    if (Math.random() < dt * 14) { const a = rnd(0, TAU), d = Math.sqrt(Math.random()) * z.r; addPart(z.x + Math.cos(a) * d, z.y + Math.sin(a) * d, rnd(-8, 8), rnd(-30, -10), rnd(.8, 1.6), rnd(2, 4), '#9aff3a', 'fire'); }
+  }
+}
 function aliveCount(f) { let n = 0; for (const m of G.mobs) if (!m.dead && f(m)) n++; return n; }
 function updateSpawning(dt) {
   G.ambT -= dt;
@@ -350,6 +357,7 @@ function updateGame(dt) {
   for (const f of G.friends) { if (!f.dead) { updateFriend(f, dt); if (f.flashT > 0) f.flashT -= dt; if (f.lunge > 0) f.lunge -= dt; if (f.expire && G.clock > f.expire) f.dead = true, f.silent = true; } }
   updateNPCs(dt);
   separateAll(dt);
+  updateVehicles(dt); updateRadFx(dt);
   updateBullets(dt); updateFires(dt); updateBurning(dt); updateThrown(dt); updateStructs(dt);
   updateSpawning(dt); updateEvents(dt);
   G.poiT -= dt; if (G.poiT <= 0) { G.poiT = .6; updatePOIs(); updateRegrow(); }
@@ -397,7 +405,7 @@ function saveGame(silent) {
   try {
     const data = {
       v: 1, seed: G.seed, diff: G.diff, clock: G.clock, playTime: G.playTime, stats: G.stats, radioOn: G.radioOn, hordeDay: G.hordeDay,
-      p: { x: P.x, y: P.y, hp: P.hp, hun: P.hun, thi: P.thi, stam: P.stam, inv: P.inv, gear: P.gear, slots: P.slots, sel: P.sel, armor: P.armor, pack: P.pack, known: P.known, skills: P.skills, sp: P.sp, lvl: P.lvl, xp: P.xp, bleed: P.bleed, infect: P.infect, sick: P.sick, rep: P.rep, healT: G.docDay },
+      p: { x: P.x, y: P.y, hp: P.hp, hun: P.hun, thi: P.thi, stam: P.stam, inv: P.inv, gear: P.gear, slots: P.slots, sel: P.sel, armor: P.armor, pack: P.pack, known: P.known, skills: P.skills, sp: P.sp, lvl: P.lvl, xp: P.xp, bleed: P.bleed, infect: P.infect, sick: P.sick, rep: P.rep, temp: P.temp, rad: P.rad, healT: G.docDay },
       structs: [...G.structs.values()].filter(s => !s.free).map(s => ({ type: s.type, tx: s.tx, ty: s.ty, hp: s.hp, ammo: s.ammo, stash: s.stash, plant: s.plant, t0: s.t0, water: s.water })),
       pois: G.pois.map(p => ({ id: p.id, owned: p.owned, lvl: p.lvl, hpFlag: p.hpFlag, cleared: p.cleared, discovered: p.discovered, chest: p.chest ? [p.chest.tx, p.chest.ty] : null })),
       crates: [...G.objs.values()].filter(o => o.k === 'crate' && o.opened).map(o => o.cid),
@@ -405,6 +413,8 @@ function saveGame(silent) {
       dep: G.depleted.map(o => [o.tx, o.ty, Math.round(o.regrowAt - G.clock)]),
       quests: G.quests, mines: G.mines.map(m => ({ x: m.x, y: m.y })),
       friends: G.friends.filter(f => !f.dead && (f.kind === 'pet' || (f.kind === 'recruit' && !f.temp))).map(f => ({ kind: f.kind, sp: f.sp, name: f.name, x: f.x, y: f.y, hp: f.hp, maxhp: f.maxhp, dmg: f.dmg, lvl: f.lvl, kills: f.kills, gun: f.gun, mode: f.mode, base: f.base })),
+      vehicles: G.vehicles.map(v => ({ t: v.t, x: v.x, y: v.y, ang: v.ang, hp: v.hp, fuel: v.fuel, stash: v.stash })),
+      zones: G.radZones.map(z => z.discovered),
       exp: packExplored(), docDay: G.docDay,
     };
     localStorage.setItem('zs_save_v1', JSON.stringify(data));
@@ -434,6 +444,8 @@ function applySave(d) {
     if (e.kind === 'pet') { const def = MOBS[e.sp]; const f = makePet({ t: e.sp, def, x: e.x, y: e.y }); Object.assign(f, { hp: e.hp, maxhp: e.maxhp, dmg: e.dmg, lvl: e.lvl, kills: e.kills, mode: e.mode || 'follow', name: e.name }); }
     else { const f = makeRecruit(e.gun, e.x, e.y); Object.assign(f, { hp: e.hp, name: e.name, mode: e.mode, base: e.base }); }
   }
+  if (d.vehicles) { G.vehicles = d.vehicles.map(e => { const v = newVehicle(e.t, e.x, e.y); v.ang = e.ang; v.hp = e.hp; v.fuel = e.fuel; v.stash = e.stash || {}; return v; }); }
+  if (d.zones) d.zones.forEach((f, i) => { if (G.radZones[i]) G.radZones[i].discovered = f; });
   G.explored = unpackExplored(d.exp);
   repaintMini();
   G.dark = darkness(phaseOf(G.clock)); P.dead = false;

@@ -10,7 +10,7 @@ function cycleWeapon(dir) {
   let k = ids.indexOf(P.sel); k = (k + dir + ids.length) % ids.length; selectSlot(ids[k]);
 }
 function toggleBuild() {
-  if (panelOpen()) return;
+  if (panelOpen() || P.veh) return;
   G.buildMode = !G.buildMode; refreshBuildBar(); SFX.play('ui');
   if (G.buildMode) msg('Mode construction : clic gauche pour poser, clic droit pour démonter.', '#9fe8a8');
 }
@@ -46,7 +46,7 @@ function onKeyDown(e) {
     case 'b': toggleBuild(); break;
     case 'l': G.flashlight = G.flashlight === false; SFX.play('click'); break;
     case 'p': saveGame(false); break;
-    case 'x': G.keys.x = true; break;
+    case 'x': { const v = P.veh || nearestVehicle(P.x, P.y, 90); if (v) openPanel('veh', v); break; }
   }
 }
 function onKeyUp(e) {

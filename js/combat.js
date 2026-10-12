@@ -133,6 +133,7 @@ function killMob(m, o) {
 
 function hurtPlayer(dmg, o) {
   if (P.dead || G.god) return; o = o || {};
+  if (P.veh && !o.pure && !o.ignoreVeh) { vehicleDamage(P.veh, dmg * .6); dmg *= .4; if (P.dead) return; }
   const ar = armorValue();
   let d = o.pure ? dmg : dmg * (1 - ar / (ar + 30));
   if (P.painT > 0) d *= .8;

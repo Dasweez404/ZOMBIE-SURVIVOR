@@ -21,10 +21,14 @@ Ouvrez simplement `index.html` dans un navigateur récent (ou servez le dossier 
 | B | Mode construction (molette = choisir, clic droit = démonter) |
 | J / K / M | Quêtes / Compétences / Carte |
 | L / P / Échap | Lampe / Sauvegarde / Pause |
+| E / X (près d'un véhicule) | Monter, descendre / entretien, carburant, coffre |
 
 ## Contenu
 
 - **Monde généré** (graine optionnelle) : forêts, lacs, routes, ~70 lieux : maisons, cabanes, stations-service, fermes, supermarchés, commissariat, hôpital, entrepôts, bunkers, tour radio, camps de pillards, avant-postes militaires, village allié.
+- **Température** : chaleur/froid selon l'heure, le terrain (désert brûlant le jour, glacial la nuit), l'abri d'un bâtiment, les feux de camp et vos vêtements (chaque pièce d'armure donne de la chaleur).
+- **Radioactivité** : zones contaminées (barils, jauge, compteur Geiger) qui réduisent vos PV max et tuent à 100 % ; combinaison NRBC, masque à gaz et anti-radiations ; butin rare et mutants à l'intérieur.
+- **Véhicules** : moto, voiture et camion à conduire (ZQSD, Maj = frein à main, E = monter/descendre, X = carburant, réparation et coffre). Ils écrasent les zombies, protègent des balles et des radiations (cabine fermée), consomment du carburant, font du bruit et peuvent exploser.
 - **Survie** : faim, soif, endurance, saignements, infections, intoxication, jour/nuit (hordes la nuit, lampe torche), poids du sac.
 - **Armes** : mêlée (couteau, gourdin, batte, hache, pioche, machette) et armes à feu avec leur propre portée, cadence, dispersion, chargeur, munitions : pistolet, PM, fusil à pompe (gerbe), fusil de chasse (lunette), fusil d'assaut, arbalète (silencieuse), lance-flammes. **Modules** : lunette, point rouge, silencieux, chargeur étendu, laser. Armes et armures **améliorables** (5 niveaux).
 - **Armures** (tête / torse / pieds), sacs à dos, **gadgets** (grenade, molotov, mine, fusée éclairante, pétard leurre), soins (bandage, antidouleur, antibiotiques, trousse), cuisine au feu de camp, **plans** à trouver ou acheter pour débloquer des recettes.
