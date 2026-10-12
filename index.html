@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zombie Survivor — Dernier Refuge</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="buildbar" class="hidden"></div>
+<div id="panel" class="hidden"></div>
+<div id="dialog" class="hidden"></div>
+<div id="pause" class="hidden"><div class="box"><h2>Pause</h2><button id="btnResume">Reprendre</button><button id="btnSave">💾 Sauvegarder</button><button id="btnMute">🔊 Son : activé</button><button id="btnQuit">Sauvegarder & quitter</button></div></div>
+<div id="gameover" class="hidden"></div>
+<div id="title">
+  <div class="tbox">
+    <h1>ZOMBIE<br><span>SURVIVOR</span></h1>
+    <p class="sub">Survivez le plus longtemps possible. Fouillez, fabriquez, apprivoisez, alliez-vous, bâtissez votre forteresse.</p>
+    <div class="diff"><span>Difficulté :</span><button data-diff="0">Facile</button><button data-diff="1" class="on">Normal</button><button data-diff="2">Difficile</button></div>
+    <div class="seed"><input id="seedIn" placeholder="Graine du monde (optionnel)" maxlength="24"></div>
+    <div class="btns"><button id="btnNew" class="big">▶ Nouvelle partie</button><button id="btnCont" class="big hidden">⏩ Continuer</button><button id="btnHelp">❓ Commandes</button></div>
+    <div id="best"></div>
+    <div id="help" class="hidden">
+      <table>
+        <tr><td>ZQSD / WASD / flèches</td><td>Se déplacer (positions physiques)</td></tr>
+        <tr><td>Souris</td><td>Viser · <b>clic gauche</b> tirer/frapper · <b>clic droit</b> maintenu = viser (zoom lunette)</td></tr>
+        <tr><td>Maj</td><td>Sprinter (endurance)</td></tr>
+        <tr><td>E (maintenir)</td><td>Interagir : fouiller, récolter, parler, apprivoiser, dormir, drapeau...</td></tr>
+        <tr><td>R</td><td>Recharger</td></tr>
+        <tr><td>1 – 5 / molette</td><td>Changer d'arme</td></tr>
+        <tr><td>H / V / C</td><td>Se soigner / manger / boire</td></tr>
+        <tr><td>G / F</td><td>Choisir / utiliser un gadget (grenade, mine, molotov, fusée, pétard)</td></tr>
+        <tr><td>Tab (ou I)</td><td>Sac, équipement, fabrication, améliorations</td></tr>
+        <tr><td>B</td><td>Mode construction (molette = choisir, clic droit = démonter)</td></tr>
+        <tr><td>J · K · M</td><td>Quêtes · Compétences · Carte</td></tr>
+        <tr><td>L · P · Échap</td><td>Lampe · Sauvegarder · Pause</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/world.js"></script>
+<script src="js/core.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/actors.js"></script>
+<script src="js/player.js"></script>
+<script src="js/systems.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
