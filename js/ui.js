@@ -17,7 +17,7 @@ function nearStation(st) {
 function openPanel(tab, ctxObj) {
   if (G.over) return;
   panelTab = tab; panelCtx = ctxObj || null; G.paused = true; G.buildMode = false; refreshBuildBar();
-  $('panel').classList.remove('hidden'); renderPanel(); SFX.play('ui');
+  $('panel').classList.remove('hidden'); renderPanel(); SFX.play('ui'); if (tab === 'map') tutEvent('map');
 }
 function closePanel() {
   panelTab = null; $('panel').classList.add('hidden'); $('dialog').classList.add('hidden'); G.paused = false; dialogNpc = null;
@@ -45,9 +45,15 @@ function renderPanel() {
   el.innerHTML = (mainTabs.includes(panelTab) ? tabsHTML() : '<div class="tabs"><span class="ptitle">' + (panelTab === 'base' ? '🏴 Base' : panelTab === 'veh' ? '🚗 Véhicule' : '🧳 Coffre') + '</span><button class="tab close" data-act="close">✖</button></div>') + '<div class="pbody">' + body + '</div>';
   if (panelTab === 'map') drawFullMap();
 }
+function itemDesc(id) {
+  const it = ITEMS[id], p = [it.n, 'Poids ' + it.w + ' kg · valeur ' + (it.v || 1)];
+  if (it.use) { const u = it.use, e = []; if (u.hun) e.push('+' + u.hun + ' faim'); if (u.thi) e.push('+' + u.thi + ' soif'); if (u.hp) e.push('+' + u.hp + ' PV'); if (u.stam) e.push('+' + u.stam + ' endurance'); if (u.temp) e.push('+' + u.temp + ' chaleur'); if (u.rad) e.push(u.rad + ' radiation'); if (u.cure) e.push('soigne : ' + u.cure.join(', ')); if (u.sick) e.push('risque d\'intoxication ' + Math.round(u.sick * 100) + ' %'); p.push(e.join(' · ')); }
+  if (it.t === 'ammo') p.push('Munition'); if (it.t === 'gadget') p.push('Gadget : touches G / F'); if (it.t === 'mod') p.push('Module d\'arme (onglet Améliorations)'); if (it.t === 'plan') p.push('Apprendre pour débloquer des recettes');
+  return p.join('\n');
+}
 function itemRow(id, n, extra) {
   const it = ITEMS[id];
-  return '<div class="item" title="' + esc(it.n) + '"><span class="ic">' + it.i + '</span><span class="nm">' + esc(it.n) + '</span><span class="ct">x' + n + '</span>' + (extra || '') + '</div>';
+  return '<div class="item" title="' + esc(itemDesc(id)) + '"><span class="ic">' + it.i + '</span><span class="nm">' + esc(it.n) + '</span><span class="ct">x' + n + '</span>' + (extra || '') + '</div>';
 }
 function invHTML() {
   const wt = invWeight(), cap = invCap();
@@ -103,17 +109,18 @@ function craftHTML() {
   }
   return h + '</div>';
 }
-function recIcon(r) { const [k, id] = r.out.split(':'); return k === 'i' ? ITEMS[id].i : k === 'w' ? WEAPONS[id].i : k === 'a' ? ARMOR[id].i : '🎒'; }
+function recIcon(r) { const [k, id] = r.out.split(':'); return k === 'v' ? VEH[id].i : k === 'i' ? ITEMS[id].i : k === 'w' ? WEAPONS[id].i : k === 'a' ? ARMOR[id].i : '🎒'; }
 function doCraft(idx) {
   const r = RECIPES[idx]; if (!r) return; if (r.plan && !P.known[r.plan]) return;
   const cost = costOf(r.cost); if (!hasItems(cost) || !nearStation(r.st)) return;
   const parts = r.out.split(':');
+  if (parts[0] === 'v') { payItems(cost); const nv = spawnCraftedVehicle(parts[1]); msg('Véhicule assemblé : ' + nv.def.n + ' (réservoir presque vide, ajoutez du carburant).', '#ffe070'); SFX.play('levelup'); G.stats.crafted = (G.stats.crafted || 0) + 1; addXP(30); renderPanel(); return; }
   if (parts[0] === 'p') { const lvl = +parts[1]; if (P.pack >= lvl) { msg('Vous avez déjà un meilleur sac.', '#e0a050'); return; } payItems(cost); P.pack = lvl; msg('Nouveau sac équipé : capacité ' + invCap() + ' !', '#ffe070'); }
   else {
     payItems(cost);
     if (parts[0] === 'i') giveItem(parts[1], +parts[2]); else if (parts[0] === 'w') giveWeapon(makeWeapon(parts[1])); else if (parts[0] === 'a') giveArmorInst(makeArmor(parts[1]));
   }
-  addXP(4); SFX.play('build'); G.stats.crafted = (G.stats.crafted || 0) + 1; renderPanel();
+  tutEvent('craft'); addXP(4); SFX.play('build'); G.stats.crafted = (G.stats.crafted || 0) + 1; renderPanel();
 }
 function upgradeCost(g) {
   const l = g.lvl;
@@ -228,7 +235,7 @@ const TRADE_STOCK = [
   ['i', 'a9', 24, 20], ['i', 'shell', 8, 16], ['i', 'a556', 15, 28], ['i', 'a762', 8, 26], ['i', 'bolt', 10, 12], ['i', 'bandage', 3, 14], ['i', 'medkit', 1, 70], ['i', 'canned', 3, 12], ['i', 'bottle_clean', 3, 10], ['i', 'seed', 5, 8], ['i', 'fuel', 2, 14], ['i', 'grenade', 1, 45], ['i', 'flare', 3, 14],
   ['w', 'pistol', 0, 120], ['w', 'shotgun', 0, 240], ['w', 'smg', 0, 320], ['w', 'hunter', 0, 420], ['a', 'helmet_moto', 0, 80], ['a', 'leather', 0, 100], ['a', 'rangers', 0, 110], ['a', 'kevlar', 0, 260],
   ['i', 'antirad', 4, 40], ['i', 'fuel', 3, 20], ['a', 'gasmask', 0, 130], ['a', 'hazmat', 0, 260],
-  ['i', 'plan_guns', 0, 120], ['i', 'plan_med', 0, 100], ['i', 'plan_turret', 0, 170], ['i', 'plan_fort', 0, 130], ['i', 'plan_armor', 0, 190], ['i', 'plan_optics', 0, 160], ['i', 'plan_serum', 0, 180], ['i', 'plan_fire', 0, 260],
+  ['i', 'plan_vehicle', 0, 190], ['i', 'plan_guns', 0, 120], ['i', 'plan_med', 0, 100], ['i', 'plan_turret', 0, 170], ['i', 'plan_fort', 0, 130], ['i', 'plan_armor', 0, 190], ['i', 'plan_optics', 0, 160], ['i', 'plan_serum', 0, 180], ['i', 'plan_fire', 0, 260],
 ];
 function discount() { return P.rep >= 60 ? .8 : P.rep >= 30 ? .9 : 1; }
 function openDialog(npc) {
@@ -305,6 +312,7 @@ const ACT = {
   store(a) { const [k, all] = a.split(':'); const s = panelCtx; const n = all ? P.inv[k] : 1; const t = invTake(k, n); s.stash[k] = (s.stash[k] || 0) + t; SFX.play('click'); renderPanel(); },
   take(a) { const [k, all] = a.split(':'); const s = panelCtx; const n = all ? s.stash[k] : 1; const got = invAdd(k, Math.min(n, s.stash[k])); s.stash[k] -= got; if (s.stash[k] <= 0) delete s.stash[k]; if (!got) msg('Inventaire plein.', '#e0a050'); SFX.play('click'); renderPanel(); },
   vrepair() { const v = panelCtx; if (!v || !hasItems({ scrap: 4, metal: 1 }) || v.hp >= v.maxhp) return; payItems({ scrap: 4, metal: 1 }); v.hp = Math.min(v.maxhp, v.hp + v.maxhp * .25); SFX.play('build'); renderPanel(); },
+  vupg(a) { const v = panelCtx, up = VUPG[a]; if (!v || !up) return; const lv = v.up[a]; if (lv >= up.max || (up.need && !P.known[up.need]) || !nearStation('workbench')) return; const cost = costOf(cleanCost(up.cost(lv + 1))); if (!hasItems(cost)) return; payItems(cost); v.up[a]++; applyUpgrades(v); SFX.play('levelup'); msg(up.n + ' niveau ' + v.up[a] + ' !', '#ffe070'); addXP(15); renderPanel(); },
   vfuel(a) { const v = panelCtx; if (!v) return; let n = a === 'all' ? Math.min(invCount('fuel'), Math.ceil((v.maxfuel - v.fuel) / 20)) : 1; n = Math.min(n, invCount('fuel')); if (n <= 0 || v.fuel >= v.maxfuel) return; invTake('fuel', n); v.fuel = Math.min(v.maxfuel, v.fuel + 20 * n); SFX.play('drink'); renderPanel(); },
   accept(a) { const q = QUESTS.find(x => x.id === a); if (q) { acceptQuest(q); renderDialog(); } },
   contract() { acceptQuest(makeContract()); renderDialog(); },

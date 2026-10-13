@@ -18,7 +18,7 @@ function acceptQuest(q) {
   if (q.contract) st.def = q;
   G.quests.active[q.id] = st;
   if (!G.quests.tracked) G.quests.tracked = q.id;
-  msg('Quête acceptée : ' + q.title, '#ffe070'); SFX.play('ui'); questCheckSoon();
+  msg('Quête acceptée : ' + q.title, '#ffe070'); SFX.play('ui'); questCheckSoon(); tutEvent('accept');
 }
 function objProgress(o, st) {
   switch (o.t) {
@@ -215,7 +215,7 @@ function abstractAssault(p) {
 // ---------- Nouvelle journée / événements ----------
 function onNewDay() {
   G.day = dayNum();
-  msg('☀ Jour ' + G.day + ' — vous avez survécu à la nuit.', '#ffe9a0');
+  msg('☀ Jour ' + G.day + ' — vous avez survécu à la nuit.', '#ffe9a0'); banner('☀ JOUR ' + G.day, 'Vous avez survécu à la nuit', '#ffe9a0');
   // production des bases
   for (const p of G.pois) if (p.owned) {
     p.hpFlag = BASE_LEVELS[p.lvl].hp;
@@ -275,7 +275,7 @@ function updateEvents(dt) {
   if (dayNum() !== G.day) { onNewDay(); }
   // coucher du soleil : horde + assaut
   if (ph > .66 && G.hordeDay !== day) {
-    G.hordeDay = day;
+    G.hordeDay = day; banner('🌙 LA NUIT TOMBE', day >= 2 ? 'Des hordes approchent — restez à l\'abri' : 'Allumez un feu, trouvez un abri', '#9ab8ff');
     if (day >= 2) spawnHorde();
     const bases = G.pois.filter(p => p.owned);
     if (bases.length && day >= 3 && (day % 2 === 1 || Math.random() < .4)) {
@@ -299,7 +299,7 @@ function updateSpawning(dt) {
   if (G.ambT <= 0) {
     const night = isNight(); G.ambT = night ? .9 : 2;
     const dm = difficultyMul();
-    const cap = Math.min(70, Math.round((6 + G.day * 1.5) * (night ? 1.8 : 1) * dm.cnt));
+    const cap = Math.min(70, Math.round((6 + G.day * 1.5) * (night ? 1.8 : 1) * dm.cnt * (tutSafe() ? .3 : 1)));
     const count = aliveCount(m => m.ambient && m.def.fac === 'undead' && !m.horde && !m.assault);
     if (count < cap) {
       for (let k = 0; k < 10; k++) {
@@ -357,7 +357,7 @@ function updateGame(dt) {
   for (const f of G.friends) { if (!f.dead) { updateFriend(f, dt); if (f.flashT > 0) f.flashT -= dt; if (f.lunge > 0) f.lunge -= dt; if (f.expire && G.clock > f.expire) f.dead = true, f.silent = true; } }
   updateNPCs(dt);
   separateAll(dt);
-  updateVehicles(dt); updateRadFx(dt);
+  updateVehicles(dt); updateRadFx(dt); updateWeather(dt);
   updateBullets(dt); updateFires(dt); updateBurning(dt); updateThrown(dt); updateStructs(dt);
   updateSpawning(dt); updateEvents(dt);
   G.poiT -= dt; if (G.poiT <= 0) { G.poiT = .6; updatePOIs(); updateRegrow(); }
@@ -373,6 +373,17 @@ function updateGame(dt) {
   for (let i = G.blasts.length - 1; i >= 0; i--) { G.blasts[i].life -= dt; if (G.blasts[i].life <= 0) G.blasts.splice(i, 1); }
   for (let i = G.msgs.length - 1; i >= 0; i--) { G.msgs[i].life -= dt; if (G.msgs[i].life <= 0) G.msgs.splice(i, 1); }
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 22);
+  // retours visuels / audio
+  for (let i = G.toasts.length - 1; i >= 0; i--) { const t = G.toasts[i]; t.age += dt; t.life -= dt; if (t.pop > 0) t.pop -= dt; if (t.life <= 0) G.toasts.splice(i, 1); }
+  for (let i = G.dmgInd.length - 1; i >= 0; i--) { G.dmgInd[i].t -= dt; if (G.dmgInd[i].t <= 0) G.dmgInd.splice(i, 1); }
+  if (G.banner) { G.banner.t += dt; if (G.banner.t > 3.4) G.banner = null; }
+  if (G.hitm && G.hitm.t > 0) G.hitm.t -= dt;
+  G.kick.x *= Math.max(0, 1 - dt * 9); G.kick.y *= Math.max(0, 1 - dt * 9);
+  if (G.fadeIn > 0) G.fadeIn -= dt * .8;
+  if (!P.dead && P.hp < maxHP() * .28) { G.heartT -= dt; if (G.heartT <= 0) { SFX.play('heart', .8); G.heartT = lerp(.55, 1.2, P.hp / (maxHP() * .28)); } }
+  G.tipT -= dt; if (G.tipT <= 0) { G.tipT = 2; updateTips(); }
+  updateTutorial(dt);
+  G.droneT -= dt; if (G.droneT <= 0) { G.droneT = .7; let th = 0; for (const m of G.mobs) if (!m.dead && m.def.fac !== 'wild' && (m.state === 'chase' || m.state === 'combat') && dist(m.x, m.y, P.x, P.y) < 700) th++; if (SET.music > 0 && SFX.ctx) SFX.drone(clamp(th / 10 + G.dark * .35 + (G.assault ? .4 : 0), 0, 1)); }
   // autosave
   G.saveT -= dt; if (G.saveT <= 0) { G.saveT = 90; saveGame(true); }
   // sommeil
@@ -413,8 +424,8 @@ function saveGame(silent) {
       dep: G.depleted.map(o => [o.tx, o.ty, Math.round(o.regrowAt - G.clock)]),
       quests: G.quests, mines: G.mines.map(m => ({ x: m.x, y: m.y })),
       friends: G.friends.filter(f => !f.dead && (f.kind === 'pet' || (f.kind === 'recruit' && !f.temp))).map(f => ({ kind: f.kind, sp: f.sp, name: f.name, x: f.x, y: f.y, hp: f.hp, maxhp: f.maxhp, dmg: f.dmg, lvl: f.lvl, kills: f.kills, gun: f.gun, mode: f.mode, base: f.base })),
-      vehicles: G.vehicles.map(v => ({ t: v.t, x: v.x, y: v.y, ang: v.ang, hp: v.hp, fuel: v.fuel, stash: v.stash })),
-      zones: G.radZones.map(z => z.discovered),
+      vehicles: G.vehicles.map(v => ({ t: v.t, x: v.x, y: v.y, ang: v.ang, hp: v.hp, fuel: v.fuel, stash: v.stash, up: v.up })),
+      zones: G.radZones.map(z => z.discovered), weather: { t: G.wType, left: G.wLeft, next: G.wNext },
       exp: packExplored(), docDay: G.docDay,
     };
     localStorage.setItem('zs_save_v1', JSON.stringify(data));
@@ -444,8 +455,9 @@ function applySave(d) {
     if (e.kind === 'pet') { const def = MOBS[e.sp]; const f = makePet({ t: e.sp, def, x: e.x, y: e.y }); Object.assign(f, { hp: e.hp, maxhp: e.maxhp, dmg: e.dmg, lvl: e.lvl, kills: e.kills, mode: e.mode || 'follow', name: e.name }); }
     else { const f = makeRecruit(e.gun, e.x, e.y); Object.assign(f, { hp: e.hp, name: e.name, mode: e.mode, base: e.base }); }
   }
-  if (d.vehicles) { G.vehicles = d.vehicles.map(e => { const v = newVehicle(e.t, e.x, e.y); v.ang = e.ang; v.hp = e.hp; v.fuel = e.fuel; v.stash = e.stash || {}; return v; }); }
+  if (d.vehicles) { G.vehicles = d.vehicles.map(e => { const v = newVehicle(e.t, e.x, e.y); if (e.up) { v.up = Object.assign(v.up, e.up); applyUpgrades(v); } v.ang = e.ang; v.hp = e.hp; v.fuel = e.fuel; v.stash = e.stash || {}; return v; }); }
   if (d.zones) d.zones.forEach((f, i) => { if (G.radZones[i]) G.radZones[i].discovered = f; });
+  if (d.weather) { G.wType = d.weather.t; G.wLeft = d.weather.left; G.wNext = d.weather.next; G.wInt = G.wType === 'clear' ? 0 : 1; }
   G.explored = unpackExplored(d.exp);
   repaintMini();
   G.dark = darkness(phaseOf(G.clock)); P.dead = false;
@@ -458,7 +470,7 @@ function initGame(opts) {
   G = {
     W: 150, H: 150, seed, diff: opts.diff === undefined ? 1 : opts.diff, clock: DAY_LEN * 0.12, playTime: 0, day: 1, dark: 0, tick: 0,
     mobs: [], friends: [], npcs: [], bullets: [], pickups: [], parts: [], texts: [], decals: [], fires: [], blasts: [], thrown: [], mines: [], msgs: [], depleted: [],
-    edgeT: 0, keys: {}, mouse: { x: 0, y: 0, sx: 0, sy: 0 }, lmb: false, rmb: false, lmbEdge: false, shake: 0, cam: { x: 0, y: 0 }, paused: false,
+    toasts: [], dmgInd: [], banner: null, hitm: null, fadeIn: 1.4, kick: { x: 0, y: 0 }, hitstop: 0, tscale: 1, slowT: 0, heartT: 0, tipT: 3, droneT: 0, edgeT: 0, keys: {}, mouse: { x: 0, y: 0, sx: 0, sy: 0 }, lmb: false, rmb: false, lmbEdge: false, shake: 0, cam: { x: 0, y: 0 }, paused: false,
     quests: { active: {}, done: {}, tracked: null, contractN: 0 }, stats: { kills: 0, zkills: 0, built: 0, looted: 0, gathered: 0, quests: 0, bases: 0, assaults: 0 },
     flowP: new Flow(84), flowB: new Flow(84), flowT: 0, flowDirty: false, ambT: 3, wildT: 5, cullT: 3, poiT: 0, saveT: 90, qDirty: false, hordeDay: 0, radioOn: false, assault: null,
     sleeping: false, sleepFade: 0, wakeFade: 0, buildMode: false, buildType: 'wall_wood', prompt: null, over: null, docDay: 0, ambushAt: 0,
@@ -467,6 +479,7 @@ function initGame(opts) {
   G.explored = new Uint8Array(G.W * G.H);
   initMini();
   P = newPlayer(); P.x = G.spawn.x; P.y = G.spawn.y;
+  initWeather();
   G.structsFree = [];
   const cf = placeStruct('campfire', G.campfireStart.tx, G.campfireStart.ty, true); cf.free = true;
   // animaux
@@ -482,8 +495,8 @@ function initGame(opts) {
   G.flowP.compute(Math.floor(P.x / TS), Math.floor(P.y / TS));
   if (opts.load) { applySave(opts.load); }
   else {
-    G.hint = [[1, 'Bienvenue, survivant. ZQSD / WASD : se déplacer — Souris : viser — Clic gauche : attaquer.'], [7, 'E : interagir (fouiller la caisse près du feu de camp, abattre des arbres...). R : recharger.'], [14, 'Tab : sac, fabrication & équipement — J : quêtes — M : carte — B : construire.'], [22, 'Cherchez le village « Fort Espoir » : suivez la route. Le soir, les infectés se multiplient...']];
-    G.hintI = 0;
+    if (opts.tutorial === true || (opts.tutorial !== false && SET.tutorial)) tutStart();
+    else { msg('Bienvenue, survivant. F1 : aide · Tab : sac · J : quêtes · M : carte.', '#cfe8ff'); }
   }
   G.day = dayNum();
 }

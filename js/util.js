@@ -49,6 +49,12 @@ function fbm(x, y, s, oct = 4) {
   return t / n;
 }
 
+// ===== Réglages (persistants) =====
+const SET_DEFAULT = { vol: .8, music: .5, shake: 1, dmgNums: true, tips: true, tutorial: true, hud: 1, quality: 1, hitstop: true, autopause: true };
+const SET = Object.assign({}, SET_DEFAULT);
+try { Object.assign(SET, JSON.parse(localStorage.getItem('zs_set') || '{}')); } catch (e) { }
+function saveSettings() { try { localStorage.setItem('zs_set', JSON.stringify(SET)); } catch (e) { } if (window.SFX && SFX.ctx) { SFX.setVol(); } }
+
 // ===== Audio synthétisé (aucun fichier externe) =====
 const SFX = {
   ctx: null, master: null, nbuf: null, on: true, last: {},
@@ -57,11 +63,30 @@ const SFX = {
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AC();
-      this.master = this.ctx.createGain(); this.master.gain.value = .45; this.master.connect(this.ctx.destination);
+      this.master = this.ctx.createGain(); this.master.gain.value = .45 * SET.vol; this.master.connect(this.ctx.destination);
+      this.musicG = this.ctx.createGain(); this.musicG.gain.value = 0; this.musicG.connect(this.ctx.destination);
       this.nbuf = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
       const d = this.nbuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     } catch (e) { this.ctx = null; }
+  },
+  setVol() { if (!this.ctx) return; this.master.gain.value = .45 * SET.vol; if (this.musicG) this.musicG.gain.value = this.droneOn ? .06 * SET.music * this.droneLv : 0; },
+  // nappe ambiante : danger 0..1
+  drone(lv) {
+    if (!this.ctx) return; this.droneLv = lv;
+    if (!this.droneOn) {
+      this.droneOn = true; const c = this.ctx, f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 260; f.connect(this.musicG);
+      this.droneF = f; for (const [fr, tp] of [[55, 'sawtooth'], [82.4, 'triangle'], [110.8, 'sine']]) { const o = c.createOscillator(); o.type = tp; o.frequency.value = fr; o.detune.value = (Math.random() - .5) * 14; const g = c.createGain(); g.gain.value = .35; o.connect(g); g.connect(f); o.start(); }
+      const lfo = c.createOscillator(), lg = c.createGain(); lfo.frequency.value = .07; lg.gain.value = 90; lfo.connect(lg); lg.connect(f.frequency); lfo.start();
+    }
+    const t = this.ctx.currentTime; this.musicG.gain.cancelScheduledValues(t); this.musicG.gain.setTargetAtTime(.06 * SET.music * (.4 + lv), t, 1.5);
+    this.droneF.frequency.setTargetAtTime(220 + lv * 380, t, 2);
+  },
+  droneOff() { if (this.musicG) this.musicG.gain.setTargetAtTime(0, this.ctx.currentTime, .3); },
+  rain(level) { // 0..1
+    if (!this.ctx) return;
+    if (!this.rainG) { const c = this.ctx, s = c.createBufferSource(); s.buffer = this.nbuf; s.loop = true; const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = .5; this.rainG = c.createGain(); this.rainG.gain.value = 0; s.connect(f); f.connect(this.rainG); this.rainG.connect(this.master); s.start(); }
+    this.rainG.gain.setTargetAtTime(this.on ? level * .22 : 0, this.ctx.currentTime, .6);
   },
   tone(type, f0, f1, dur, vol = .3, delay = 0) {
     const c = this.ctx, t = c.currentTime + delay;
@@ -109,6 +134,12 @@ const SFX = {
       case 'eat': this.noise(.12, .2 * v, 900, 300); this.noise(.12, .2 * v, 900, 300, .15); break;
       case 'drink': this.noise(.3, .15 * v, 1200, 400); break;
       case 'engine': this.tone('sawtooth', 48 + (extra || 0) * 70, 40 + (extra || 0) * 60, .13, .09 * v); break;
+      case 'thunder': this.noise(2.2, .7 * v, 700, 50); this.tone('sine', 55, 25, 1.6, .4 * v); break;
+      case 'hitm': this.tone('square', 1500, 1100, .035, .07 * v); break;
+      case 'killm': this.tone('triangle', 900, 1500, .09, .1 * v); break;
+      case 'heart': this.tone('sine', 62, 38, .12, .3 * v); this.tone('sine', 58, 36, .12, .24 * v, .2); break;
+      case 'whoosh': this.noise(.25, .12 * v, 900, 3000); break;
+      case 'banner': this.tone('sine', 330, 330, .25, .12 * v); this.tone('sine', 495, 495, .4, .1 * v, .12); break;
       case 'zdie': this.tone('sawtooth', 150, 40, .4, .15 * v); break;
     }
   }

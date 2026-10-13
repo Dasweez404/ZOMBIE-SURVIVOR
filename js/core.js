@@ -5,7 +5,9 @@ let P = null; // joueur
 
 function msg(text, col) {
   if (!G) return;
-  G.msgs.push({ t: text, col: col || '#e8e8e8', life: 7 });
+  const last = G.msgs[G.msgs.length - 1];
+  if (last && last.base === text) { last.n = (last.n || 1) + 1; last.t = text + ' (×' + last.n + ')'; last.life = 7; return; }
+  G.msgs.push({ t: text, base: text, col: col || '#e8e8e8', life: 7 });
   if (G.msgs.length > 7) G.msgs.shift();
 }
 function invCount(id) { return P.inv[id] || 0; }
@@ -29,7 +31,7 @@ function invTake(id, n) {
 // Ajoute à l'inventaire ; le surplus tombe au sol
 function giveItem(id, n, silent) {
   const got = invAdd(id, n);
-  if (!silent && got > 0) { msg('+' + got + ' ' + ITEMS[id].n, '#9fd69f'); SFX.play('pickup'); questCheckSoon(); }
+  if (!silent && got > 0) { toastItem(id, got); SFX.play('pickup'); questCheckSoon(); }
   if (got < n) { dropPickup(P.x + rnd(-20, 20), P.y + rnd(-20, 20), id, n - got); msg('Inventaire plein ! ' + (n - got) + ' ' + ITEMS[id].n + ' laissé(s) au sol.', '#e0a050'); }
   return got;
 }
@@ -109,10 +111,10 @@ function maxStam() { return 100 + P.skills.end * 12; }
 // ===== XP / niveaux =====
 function xpNeed(l) { return Math.round(50 * Math.pow(l, 1.5)); }
 function addXP(n) {
-  P.xp += n;
+  P.xp += n; if (n >= 3) addText(P.x + rnd(-10, 10), P.y - 38, '+' + Math.round(n) + ' XP', '#8ac8ff');
   while (P.xp >= xpNeed(P.lvl)) {
     P.xp -= xpNeed(P.lvl); P.lvl++; P.sp++;
-    msg('Niveau ' + P.lvl + ' ! +1 point de compétence (touche K)', '#ffe070'); SFX.play('levelup');
+    msg('Niveau ' + P.lvl + ' ! +1 point de compétence (touche K)', '#ffe070'); SFX.play('levelup'); banner('⭐ NIVEAU ' + P.lvl, '+1 point de compétence (K)', '#ffe070'); for (let i = 0; i < 24; i++) { const a = rnd(0, TAU); addPart(P.x, P.y, Math.cos(a) * 140, Math.sin(a) * 140, .7, 3, '#ffe070', 'fire'); } addPart(P.x, P.y, 0, 0, .8, 60, '#ffe070', 'ring');
     P.hp = Math.min(maxHP(), P.hp + 20);
   }
 }

@@ -1,9 +1,9 @@
 'use strict';
-// ===== Entrée : écran titre, entrées clavier/souris, boucle principale =====
+// ===== Entrée : écran titre, réglages, entrées clavier/souris, boucle principale =====
 let lastTs = 0, running = false;
 
 function selectSlot(i) {
-  if (P.slots[i] && P.sel !== i) { P.sel = i; P.reloading = false; P.cd = Math.max(P.cd, .15); SFX.play('click'); }
+  if (P.slots[i] && P.sel !== i) { P.sel = i; P.reloading = false; P.cd = Math.max(P.cd, .15); SFX.play('whoosh', .6); }
 }
 function cycleWeapon(dir) {
   const ids = P.slots.map((w, i) => w ? i : -1).filter(i => i >= 0); if (ids.length < 2) return;
@@ -12,16 +12,21 @@ function cycleWeapon(dir) {
 function toggleBuild() {
   if (panelOpen() || P.veh) return;
   G.buildMode = !G.buildMode; refreshBuildBar(); SFX.play('ui');
-  if (G.buildMode) msg('Mode construction : clic gauche pour poser, clic droit pour démonter.', '#9fe8a8');
+  if (G.buildMode) msg('Mode construction : clic gauche pour poser, clic droit pour démonter, molette pour choisir.', '#9fe8a8');
 }
+const MAINTABS = ['inv', 'craft', 'mods', 'skills', 'quests', 'map'];
 
 function onKeyDown(e) {
   if (!G || !running) return;
   if (e.target && (e.target.tagName === 'INPUT')) return;
   const code = e.code, key = e.key.toLowerCase();
-  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(code)) e.preventDefault();
+  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1'].includes(code)) e.preventDefault();
   if (G.over) return;
+  if (code === 'F1' || key === '?') { toggleHelp(); return; }
+  if (!$('settings').classList.contains('hidden')) { if (key === 'escape') closeSettings(); return; }
+  if (!$('help2').classList.contains('hidden')) { if (key === 'escape') toggleHelp(); return; }
   const mv = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'w', ArrowLeft: 'a', ArrowDown: 's', ArrowRight: 'd' }[code];
+  if (panelOpen() && MAINTABS.includes(panelTab) && (code === 'ArrowLeft' || code === 'ArrowRight' || key === 'q' && false)) { const i = MAINTABS.indexOf(panelTab); panelTab = MAINTABS[(i + (code === 'ArrowRight' ? 1 : -1) + MAINTABS.length) % MAINTABS.length]; renderPanel(); SFX.play('ui'); if (panelTab === 'map') tutEvent('map'); return; }
   if (mv) { G.keys[mv] = true; return; }
   if (code === 'ShiftLeft' || code === 'ShiftRight') { G.keys.shift = true; return; }
   if (key === 'escape') {
@@ -58,30 +63,33 @@ function onKeyUp(e) {
 }
 function togglePause() {
   if (G.over) return;
-  G.pausedMenu = !G.pausedMenu; G.paused = G.pausedMenu; $('pause').classList.toggle('hidden', !G.pausedMenu);
+  G.pausedMenu = !G.pausedMenu; G.paused = G.pausedMenu || panelOpen(); $('pause').classList.toggle('hidden', !G.pausedMenu);
+  if (!G.pausedMenu) closeSettings();
 }
-function onMouseMove(e) { if (!G) return; G.mouse.sx = e.clientX; G.mouse.sy = e.clientY; }
+function toggleHelp() {
+  const h = $('help2'), open = h.classList.contains('hidden');
+  h.classList.toggle('hidden', !open);
+  if (open) { G.helpWasPaused = G.paused; G.paused = true; } else { G.paused = G.helpWasPaused || G.pausedMenu || panelOpen(); }
+}
+function onMouseMove(e) {
+  if (!G) return;
+  if (running && G.tut && G.tut.on) tutEvent('aim', Math.hypot(e.clientX - G.mouse.sx, e.clientY - G.mouse.sy));
+  G.mouse.sx = e.clientX; G.mouse.sy = e.clientY;
+}
 function onMouseDown(e) {
   if (!G || !running || G.over) return;
   SFX.init();
   if (e.target !== cvs) return;
   if (G.paused) return;
-  if (e.button === 0) {
-    G.lmb = true; G.lmbEdge = true;
-    if (G.buildMode) buildClick(false);
-  } else if (e.button === 2) {
-    G.rmb = true; if (G.buildMode) buildClick(true);
-  }
+  if (e.button === 0) { G.lmb = true; G.lmbEdge = true; if (G.buildMode) buildClick(false); }
+  else if (e.button === 2) { G.rmb = true; if (G.buildMode) buildClick(true); }
 }
 function onMouseUp(e) { if (!G) return; if (e.button === 0) G.lmb = false; if (e.button === 2) G.rmb = false; }
 function buildClick(remove) {
   const tx = Math.floor(G.mouse.x / TS), ty = Math.floor(G.mouse.y / TS);
-  if (remove) {
-    const s = G.structs.get(IDX(tx, ty)); if (s && !s.free && dist(P.x, P.y, s.x, s.y) < 240) { dismantle(s); }
-    return;
-  }
+  if (remove) { const s = G.structs.get(IDX(tx, ty)); if (s && !s.free && dist(P.x, P.y, s.x, s.y) < 240) dismantle(s); return; }
   const err = checkPlace(G.buildType, tx, ty);
-  if (err) { if (G.clock - (G.errMsgT || 0) > 1) { msg('Impossible : ' + err, '#ff9a8a'); G.errMsgT = G.clock; } return; }
+  if (err) { if (G.clock - (G.errMsgT || 0) > 1) { msg('Impossible : ' + err, '#ff9a8a'); G.errMsgT = G.clock; } SFX.play('click', .5); return; }
   placeStruct(G.buildType, tx, ty);
 }
 function onWheel(e) {
@@ -93,42 +101,91 @@ function onWheel(e) {
 function frame(ts) {
   requestAnimationFrame(frame);
   if (!running || !G) { lastTs = ts; return; }
-  const dt = Math.min(.05, (ts - lastTs) / 1000 || .016); lastTs = ts;
+  let dt = Math.min(.05, (ts - lastTs) / 1000 || .016); lastTs = ts;
   const time = ts / 1000;
   G.mouse.x = G.mouse.sx + (G.camX || 0); G.mouse.y = G.mouse.sy + (G.camY || 0);
-  if (!G.paused) {
+  if (G.hitstop > 0) { G.hitstop -= dt; dt = 0; }
+  if (G.slowT > 0) { G.slowT -= dt; dt *= .35; }
+  if (!G.paused && dt > 0) {
     updateGame(dt);
     if (G.flowDirty) { G.flowDirty = false; G.flowP.compute(Math.floor(P.x / TS), Math.floor(P.y / TS)); }
-    if (G.miniDirty) G.miniDirty = false;
     G.prompt = (!P.dead) ? findInteract() : null;
     if (G.keys.e && G.prompt && G.prompt.t === 'harv') interact();
   }
-  updateCamera(dt);
+  updateCamera(Math.max(dt, .001));
   render(time);
   document.body.classList.toggle('uiopen', G.paused);
 }
 
 function startGame(opts) {
-  SFX.init();
+  SFX.init(); SFX.setVol();
   initGame(opts);
-  $('title').classList.add('hidden');
+  $('title').classList.add('hidden'); stopTitleBg();
   G.cam.x = P.x - VW / 2; G.cam.y = P.y - VH / 2; G.camX = G.cam.x; G.camY = G.cam.y;
   running = true; G.mouse.sx = VW / 2 + 100; G.mouse.sy = VH / 2;
   refreshBuildBar();
+  if (!opts.load) banner('☀ JOUR 1', 'Survivez le plus longtemps possible', '#ffe9a0');
 }
+
+// ----- réglages -----
+function buildSettings() {
+  const row = (label, input) => '<div class="srow"><label>' + label + '</label>' + input + '</div>';
+  const slider = (k, min, max, step) => '<input type="range" data-set="' + k + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + SET[k] + '"><span class="sv" data-sv="' + k + '">' + Math.round(SET[k] * 100) + '%</span>';
+  const check = k => '<input type="checkbox" data-set="' + k + '"' + (SET[k] ? ' checked' : '') + '>';
+  $('settings').innerHTML = '<div class="box wide"><h2>⚙️ Options</h2>' +
+    row('Volume des effets', slider('vol', 0, 1, .05)) + row('Ambiance sonore', slider('music', 0, 1, .05)) + row('Tremblements d\'écran', slider('shake', 0, 1.5, .1)) + row('Taille de l\'interface', slider('hud', .8, 1.4, .05)) +
+    row('Qualité graphique élevée', check('quality')) + row('Nombres de dégâts', check('dmgNums')) + row('Hit-stop (impact)', check('hitstop')) + row('Conseils contextuels', check('tips')) + row('Tutoriel au démarrage', check('tutorial')) + row('Pause si fenêtre inactive', check('autopause')) +
+    '<div class="srow"><button id="btnTips">Réafficher tous les conseils</button><button id="btnSetClose" class="pri">Fermer</button></div></div>';
+  $('settings').querySelectorAll('input[data-set]').forEach(inp => {
+    inp.oninput = () => { const k = inp.dataset.set; SET[k] = inp.type === 'checkbox' ? (k === 'quality' ? (inp.checked ? 1 : 0) : inp.checked) : +inp.value; const sv = $('settings').querySelector('[data-sv="' + k + '"]'); if (sv) sv.textContent = Math.round(SET[k] * 100) + '%'; saveSettings(); if (k === 'music' && SFX.ctx) SFX.drone(.3); };
+  });
+  $('btnTips').onclick = () => { TIPS_SEEN = {}; saveTips(); SFX.play('ui'); };
+  $('btnSetClose').onclick = closeSettings;
+}
+function openSettings() { buildSettings(); $('settings').classList.remove('hidden'); SFX.init(); SFX.play('ui'); }
+function closeSettings() { $('settings').classList.add('hidden'); }
+
+// ----- fond animé de l'écran titre -----
+let titleRAF = 0;
+function startTitleBg() {
+  const cv = $('tbg'), c = cv.getContext('2d'); const zs = []; for (let i = 0; i < 7; i++) zs.push({ x: Math.random(), s: .008 + Math.random() * .012, o: Math.random() * 6, sc: .8 + Math.random() * .6, y: .0 });
+  const stars = []; for (let i = 0; i < 140; i++) stars.push([Math.random(), Math.random() * .6, Math.random() * 6, .5 + Math.random() * 1.5]);
+  const embers = []; for (let i = 0; i < 40; i++) embers.push([Math.random(), Math.random(), .02 + Math.random() * .05, Math.random() * 6]);
+  function loop(ts) {
+    titleRAF = requestAnimationFrame(loop); const w = cv.width = window.innerWidth, h = cv.height = window.innerHeight, t = ts / 1000;
+    const sky = c.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#05070d'); sky.addColorStop(.55, '#1a1424'); sky.addColorStop(.8, '#3a1a1e'); sky.addColorStop(1, '#120a0c'); c.fillStyle = sky; c.fillRect(0, 0, w, h);
+    for (const s of stars) { c.fillStyle = 'rgba(255,255,255,' + (.3 + Math.sin(t * 2 + s[2]) * .25) + ')'; c.fillRect(s[0] * w, s[1] * h, s[3], s[3]); }
+    const mx = w * .78, my = h * .2, mr = Math.min(w, h) * .07; const mg = c.createRadialGradient(mx, my, mr * .5, mx, my, mr * 4); mg.addColorStop(0, 'rgba(255,230,190,.35)'); mg.addColorStop(1, 'rgba(255,230,190,0)'); c.fillStyle = mg; c.fillRect(mx - mr * 4, my - mr * 4, mr * 8, mr * 8);
+    c.fillStyle = '#f0e2c0'; c.beginPath(); c.arc(mx, my, mr, 0, TAU); c.fill(); c.fillStyle = 'rgba(160,140,110,.35)'; c.beginPath(); c.arc(mx - mr * .3, my - mr * .2, mr * .25, 0, TAU); c.arc(mx + mr * .25, my + mr * .3, mr * .18, 0, TAU); c.fill();
+    // collines
+    for (let L = 0; L < 3; L++) { c.fillStyle = ['#1a1220', '#150e18', '#0d080e'][L]; c.beginPath(); c.moveTo(0, h); for (let x = 0; x <= w; x += 20) c.lineTo(x, h * (.68 + L * .08) + Math.sin(x * .004 + L * 2) * h * .04 + Math.sin(x * .011 + L) * h * .015); c.lineTo(w, h); c.fill(); }
+    // arbres morts
+    c.strokeStyle = '#070508'; c.lineCap = 'round';
+    for (let i = 0; i < 8; i++) { const x = (i * .137 + .05) * w, y = h * (.8 + (i % 3) * .05), s = h * (.1 + (i % 4) * .03); c.lineWidth = s * .09; c.beginPath(); c.moveTo(x, y); c.lineTo(x, y - s); c.moveTo(x, y - s * .5); c.lineTo(x + s * .35, y - s * .85); c.moveTo(x, y - s * .7); c.lineTo(x - s * .3, y - s * .95); c.stroke(); }
+    // zombies
+    for (const z of zs) { z.x += z.s * .0016 * 60 * (1 / 60); if (z.x > 1.1) z.x = -.1; const x = z.x * w, y = h * (.86 + (z.o % 1) * .08), s = h * .05 * z.sc, b = Math.sin(t * 2 + z.o) * s * .08; c.fillStyle = '#060406'; c.beginPath(); c.ellipse(x, y - s * 1.3 + b, s * .35, s * .7, 0, 0, TAU); c.fill(); c.beginPath(); c.arc(x + s * .1, y - s * 2.1 + b, s * .25, 0, TAU); c.fill(); c.lineWidth = s * .13; c.strokeStyle = '#060406'; c.beginPath(); c.moveTo(x, y - s * 1.7 + b); c.lineTo(x + s * .8, y - s * 1.6 + b + Math.sin(t * 3 + z.o) * 3); c.moveTo(x, y - s * 1.5 + b); c.lineTo(x + s * .75, y - s * 1.35 + b); c.moveTo(x - s * .1, y - s * .7); c.lineTo(x - s * .15 + Math.sin(t * 2 + z.o) * s * .3, y); c.moveTo(x + s * .1, y - s * .7); c.lineTo(x + s * .1 - Math.sin(t * 2 + z.o) * s * .3, y); c.stroke(); c.fillStyle = 'rgba(255,60,40,.9)'; c.fillRect(x + s * .18, y - s * 2.15 + b, 2, 2); }
+    // brume
+    for (let i = 0; i < 5; i++) { const x = ((i * 430 + t * (8 + i * 4)) % (w + 800)) - 400; c.fillStyle = 'rgba(160,150,170,.05)'; c.beginPath(); c.ellipse(x, h * (.62 + i * .07), 360, 50, 0, 0, TAU); c.fill(); }
+    // braises
+    for (const e of embers) { const y = ((e[1] - t * e[2]) % 1 + 1) % 1; c.fillStyle = 'rgba(255,' + (120 + e[3] * 20 | 0) + ',50,' + (.25 + Math.sin(t * 3 + e[3]) * .2) + ')'; c.fillRect(((e[0] + Math.sin(t * .5 + e[3]) * .02) * w), y * h, 2, 2); }
+  }
+  loop(0);
+}
+function stopTitleBg() { cancelAnimationFrame(titleRAF); }
 
 function setupTitle() {
   let diff = 1;
   document.querySelectorAll('[data-diff]').forEach(b => b.onclick = () => { diff = +b.dataset.diff; document.querySelectorAll('[data-diff]').forEach(x => x.classList.toggle('on', x === b)); SFX.init(); SFX.play('ui'); });
-  $('btnNew').onclick = () => { const s = $('seedIn').value.trim(); let seed = 0; if (s) { seed = /^\d+$/.test(s) ? +s : [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7); } startGame({ diff, seed: seed || undefined }); };
+  const seedOf = () => { const s = $('seedIn').value.trim(); let seed = 0; if (s) seed = /^\d+$/.test(s) ? +s : [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7); return seed || undefined; };
+  $('btnNew').onclick = () => startGame({ diff, seed: seedOf() });
+  $('btnTut').onclick = () => { SET.tutorial = true; saveSettings(); startGame({ diff: 0, seed: seedOf(), tutorial: true }); };
   const cont = $('btnCont');
-  if (hasSave()) {
-    cont.classList.remove('hidden');
-    cont.onclick = () => { const d = loadSaveData(); if (!d) return; startGame({ seed: d.seed, diff: d.diff, load: d }); };
-  }
+  if (hasSave()) { cont.classList.remove('hidden'); cont.onclick = () => { const d = loadSaveData(); if (!d) return; startGame({ seed: d.seed, diff: d.diff, load: d }); }; }
   $('btnHelp').onclick = () => $('help').classList.toggle('hidden');
+  $('btnOpt').onclick = openSettings;
   let best = 0; try { best = +localStorage.getItem('zs_best') || 0; } catch (e) { }
-  $('best').textContent = best ? 'Meilleur score : ' + best : '';
+  $('best').textContent = best ? '🏆 Meilleur score : ' + best : '';
+  startTitleBg();
 }
 
 window.addEventListener('load', () => {
@@ -137,13 +194,16 @@ window.addEventListener('load', () => {
   window.addEventListener('keydown', onKeyDown); window.addEventListener('keyup', onKeyUp);
   window.addEventListener('mousemove', onMouseMove); window.addEventListener('mousedown', onMouseDown); window.addEventListener('mouseup', onMouseUp);
   window.addEventListener('wheel', onWheel, { passive: true });
-  window.addEventListener('blur', () => { if (G) { G.keys = {}; G.lmb = false; G.rmb = false; } });
+  window.addEventListener('blur', () => { if (G) { G.keys = {}; G.lmb = false; G.rmb = false; if (running && SET.autopause && !G.paused && !G.over) togglePause(); } });
   cvs.addEventListener('contextmenu', e => e.preventDefault());
   $('panel').addEventListener('click', onPanelClick); $('dialog').addEventListener('click', onPanelClick);
+  $('tut').addEventListener('click', e => { const b = e.target.closest('[data-tut]'); if (b) tutAction(b.dataset.tut); });
   $('buildbar').addEventListener('click', e => { const b = e.target.closest('[data-b]'); if (b) { G.buildType = b.dataset.b; refreshBuildBar(); SFX.play('click'); } });
   $('btnResume').onclick = togglePause; $('btnSave').onclick = () => { saveGame(false); };
+  $('btnPOpt').onclick = openSettings; $('btnPHelp').onclick = () => { toggleHelp(); };
+  $('btnPTut').onclick = () => { togglePause(); tutStart(); };
   $('btnQuit').onclick = () => { saveGame(true); location.reload(); };
-  $('btnMute').onclick = () => { SFX.on = !SFX.on; $('btnMute').textContent = SFX.on ? '🔊 Son : activé' : '🔇 Son : coupé'; };
+  $('help2').addEventListener('click', e => { if (e.target.id === 'help2' || e.target.closest('[data-x]')) toggleHelp(); });
   setupTitle();
   requestAnimationFrame(frame);
   window.__dbg = { G: () => G, P: () => P, start: startGame };

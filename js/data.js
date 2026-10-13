@@ -59,11 +59,12 @@ const ITEMS = {
   plan_fire:  { n: 'Plan : lance-flammes', i: '📜', w: 0, v: 160, t: 'plan', plan: 'plan_fire' },
   plan_serum: { n: 'Plan : sérum', i: '📜', w: 0, v: 120, t: 'plan', plan: 'plan_serum' },
   plan_turret:{ n: 'Plan : tourelle', i: '📜', w: 0, v: 120, t: 'plan', plan: 'plan_turret' },
+  plan_vehicle:{ n: 'Plan : véhicules', i: '📜', w: 0, v: 150, t: 'plan', plan: 'plan_vehicle' },
   plan_fort:  { n: 'Plan : fortifications', i: '📜', w: 0, v: 90, t: 'plan', plan: 'plan_fort' },
 };
 const PLAN_NAMES = {
   plan_guns: 'armes à feu', plan_med: 'médecine', plan_armor: 'armures lourdes', plan_optics: 'optiques & modules',
-  plan_fire: 'lance-flammes', plan_serum: 'sérum', plan_turret: 'tourelles', plan_fort: 'fortifications',
+  plan_fire: 'lance-flammes', plan_vehicle: 'véhicules', plan_serum: 'sérum', plan_turret: 'tourelles', plan_fort: 'fortifications',
 };
 const AMMO_PER = { fuel: 20 };
 
@@ -175,6 +176,9 @@ const RECIPES = [
   R('Gadgets', 'Cocktail Molotov (x2)', 'i:molotov:2', { fuel: 1, cloth: 2 }, 'workbench'),
   R('Gadgets', 'Grenade', 'i:grenade:1', { scrap: 3, powder: 2, metal: 1 }, 'workbench'),
   R('Gadgets', 'Mine', 'i:mine:1', { scrap: 4, powder: 3, elec: 1 }, 'workbench'),
+  R('Véhicules', 'Moto', 'v:moto', { metal: 14, scrap: 22, elec: 3, fuel: 2 }, 'workbench'),
+  R('Véhicules', 'Voiture', 'v:car', { metal: 34, scrap: 36, elec: 6, fuel: 3, cloth: 6 }, 'workbench', 'plan_vehicle'),
+  R('Véhicules', 'Camion', 'v:truck', { metal: 56, scrap: 50, elec: 10, fuel: 4, wood: 10 }, 'workbench', 'plan_vehicle'),
   R('Modules', 'Point rouge', 'i:reddot:1', { metal: 1, elec: 1, scrap: 2 }, 'workbench'),
   R('Modules', 'Chargeur étendu', 'i:magext:1', { metal: 2, scrap: 4 }, 'workbench'),
   R('Modules', 'Silencieux', 'i:suppr:1', { metal: 3, cloth: 2, scrap: 2 }, 'workbench', 'plan_optics'),
@@ -232,12 +236,12 @@ const LOOT = {
 const RARE_LOOT = { // armes / armures / plans trouvables (type, id, poids)
   house: [['w', 'pistol', 2], ['w', 'bat', 2], ['a', 'jacket', 3], ['a', 'cap', 3], ['a', 'shoes', 2], ['w', 'axe', 2], ['w', 'knife', 2], ['m', 'reddot', 1]],
   cabin: [['w', 'crossbow', 2], ['w', 'axe', 2], ['a', 'leather', 2], ['w', 'machete', 1], ['p', 'plan_fort', 1]],
-  gas: [['w', 'pickaxe', 2], ['a', 'helmet_moto', 2], ['w', 'bat', 1]],
+  gas: [['p', 'plan_vehicle', 2], ['w', 'pickaxe', 2], ['a', 'helmet_moto', 2], ['w', 'bat', 1]],
   farm: [['w', 'shotgun', 2], ['w', 'axe', 2], ['a', 'shoes', 2], ['w', 'hunter', 1]],
   market: [['a', 'jacket', 2], ['a', 'shoes', 2]],
   police: [['w', 'pistol', 4], ['w', 'smg', 2], ['w', 'shotgun', 3], ['a', 'helmet_moto', 3], ['a', 'kevlar', 2], ['m', 'laser', 2], ['p', 'plan_guns', 2]],
   hospital: [['p', 'plan_med', 5], ['p', 'plan_serum', 2], ['a', 'jacket', 1]],
-  warehouse: [['w', 'smg', 1], ['a', 'rangers', 2], ['a', 'leather', 2], ['m', 'magext', 3], ['p', 'plan_turret', 2], ['p', 'plan_fort', 2]],
+  warehouse: [['p', 'plan_vehicle', 2], ['w', 'smg', 1], ['a', 'rangers', 2], ['a', 'leather', 2], ['m', 'magext', 3], ['p', 'plan_turret', 2], ['p', 'plan_fort', 2]],
   bunker: [['w', 'ar', 4], ['w', 'hunter', 3], ['a', 'helmet_mil', 3], ['a', 'kevlar', 3], ['a', 'plate', 1], ['a', 'rangers', 2], ['m', 'scope', 3], ['m', 'suppr', 3], ['p', 'plan_optics', 2], ['p', 'plan_armor', 2], ['p', 'plan_fire', 1]],
   camp: [['w', 'shotgun', 3], ['w', 'smg', 2], ['w', 'machete', 2], ['a', 'leather', 2], ['m', 'suppr', 1], ['p', 'plan_guns', 1]],
   legion: [['w', 'ar', 4], ['w', 'hunter', 3], ['a', 'helmet_mil', 3], ['a', 'plate', 2], ['m', 'scope', 2], ['m', 'suppr', 2], ['m', 'laser', 2], ['p', 'plan_armor', 2]],

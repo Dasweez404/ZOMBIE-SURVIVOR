@@ -8,38 +8,45 @@
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="tut" class="hidden"></div>
+<div id="tips"></div>
 <div id="buildbar" class="hidden"></div>
 <div id="panel" class="hidden"></div>
 <div id="dialog" class="hidden"></div>
-<div id="pause" class="hidden"><div class="box"><h2>Pause</h2><button id="btnResume">Reprendre</button><button id="btnSave">💾 Sauvegarder</button><button id="btnMute">🔊 Son : activé</button><button id="btnQuit">Sauvegarder & quitter</button></div></div>
+<div id="pause" class="hidden"><div class="box"><h2>⏸ Pause</h2><button id="btnResume" class="pri">▶ Reprendre</button><button id="btnPOpt">⚙️ Options</button><button id="btnPHelp">❓ Commandes (F1)</button><button id="btnPTut">🎓 Revoir le tutoriel</button><button id="btnSave">💾 Sauvegarder</button><button id="btnQuit">🚪 Sauvegarder et quitter</button></div></div>
+<div id="settings" class="hidden"></div>
+<div id="help2" class="hidden"><div class="box wide"><h2>❓ Commandes</h2><div class="helptbl"></div><button data-x="1" class="pri">Fermer (F1)</button></div></div>
 <div id="gameover" class="hidden"></div>
 <div id="title">
+  <canvas id="tbg"></canvas>
   <div class="tbox">
     <h1>ZOMBIE<br><span>SURVIVOR</span></h1>
-    <p class="sub">Survivez le plus longtemps possible. Fouillez, fabriquez, apprivoisez, alliez-vous, bâtissez votre forteresse.</p>
-    <div class="diff"><span>Difficulté :</span><button data-diff="0">Facile</button><button data-diff="1" class="on">Normal</button><button data-diff="2">Difficile</button></div>
+    <p class="sub">Survivez le plus longtemps possible. Fouillez, fabriquez, conduisez, apprivoisez, alliez-vous, bâtissez votre forteresse… et tenez bon la nuit.</p>
+    <div class="diff"><span>Difficulté</span><button data-diff="0">Facile</button><button data-diff="1" class="on">Normal</button><button data-diff="2">Difficile</button></div>
     <div class="seed"><input id="seedIn" placeholder="Graine du monde (optionnel)" maxlength="24"></div>
-    <div class="btns"><button id="btnNew" class="big">▶ Nouvelle partie</button><button id="btnCont" class="big hidden">⏩ Continuer</button><button id="btnHelp">❓ Commandes</button></div>
+    <div class="btns"><button id="btnNew" class="big">▶ Nouvelle partie</button><button id="btnCont" class="big hidden">⏩ Continuer</button></div>
+    <div class="btns small"><button id="btnTut">🎓 Tutoriel guidé</button><button id="btnOpt">⚙️ Options</button><button id="btnHelp">❓ Commandes</button></div>
     <div id="best"></div>
-    <div id="help" class="hidden">
-      <table>
-        <tr><td>ZQSD / WASD / flèches</td><td>Se déplacer (positions physiques)</td></tr>
-        <tr><td>Souris</td><td>Viser · <b>clic gauche</b> tirer/frapper · <b>clic droit</b> maintenu = viser (zoom lunette)</td></tr>
-        <tr><td>Maj</td><td>Sprinter (endurance)</td></tr>
-        <tr><td>E (maintenir)</td><td>Interagir : fouiller, récolter, parler, apprivoiser, dormir, drapeau...</td></tr>
-        <tr><td>R</td><td>Recharger</td></tr>
-        <tr><td>1 – 5 / molette</td><td>Changer d'arme</td></tr>
-        <tr><td>H / V / C</td><td>Se soigner / manger / boire</td></tr>
-        <tr><td>G / F</td><td>Choisir / utiliser un gadget (grenade, mine, molotov, fusée, pétard)</td></tr>
-        <tr><td>Tab (ou I)</td><td>Sac, équipement, fabrication, améliorations</td></tr>
-        <tr><td>B</td><td>Mode construction (molette = choisir, clic droit = démonter)</td></tr>
-        <tr><td>J · K · M</td><td>Quêtes · Compétences · Carte</td></tr>
-        <tr><td>Véhicule</td><td>E monter/descendre · ZQSD conduire · Maj frein à main · X carburant/réparation/coffre</td></tr>
-        <tr><td>L · P · Échap</td><td>Lampe · Sauvegarder · Pause</td></tr>
-      </table>
-    </div>
+    <div id="help" class="hidden helptbl"></div>
   </div>
 </div>
+<template id="helptpl">
+  <table>
+    <tr><td><kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> / WASD / flèches</td><td>Se déplacer (positions physiques des touches)</td></tr>
+    <tr><td>Souris</td><td>Viser · <b>clic gauche</b> tirer / frapper · <b>clic droit</b> maintenu = viser (zoom lunette)</td></tr>
+    <tr><td><kbd>Maj</kbd></td><td>Sprinter (endurance) · frein à main en véhicule</td></tr>
+    <tr><td><kbd>E</kbd> (maintenir)</td><td>Interagir : fouiller, récolter, parler, apprivoiser, dormir, drapeau, monter/descendre d'un véhicule</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Recharger</td></tr>
+    <tr><td><kbd>1</kbd>–<kbd>5</kbd> / molette</td><td>Changer d'arme</td></tr>
+    <tr><td><kbd>H</kbd> <kbd>V</kbd> <kbd>C</kbd></td><td>Se soigner / manger / boire</td></tr>
+    <tr><td><kbd>G</kbd> <kbd>F</kbd></td><td>Choisir / utiliser un gadget (grenade, molotov, mine, fusée, pétard leurre)</td></tr>
+    <tr><td><kbd>Tab</kbd> (ou I)</td><td>Sac, équipement, fabrication, améliorations (← → pour changer d'onglet)</td></tr>
+    <tr><td><kbd>B</kbd></td><td>Mode construction (molette = choisir, clic droit = démonter)</td></tr>
+    <tr><td><kbd>X</kbd></td><td>Véhicule : carburant, réparation, améliorations, coffre</td></tr>
+    <tr><td><kbd>J</kbd> <kbd>K</kbd> <kbd>M</kbd></td><td>Quêtes · Compétences · Carte</td></tr>
+    <tr><td><kbd>L</kbd> <kbd>P</kbd> <kbd>Échap</kbd> <kbd>F1</kbd></td><td>Lampe · Sauvegarder · Pause · Cette aide</td></tr>
+  </table>
+</template>
 <script src="js/util.js"></script>
 <script src="js/data.js"></script>
 <script src="js/world.js"></script>
@@ -48,9 +55,13 @@
 <script src="js/actors.js"></script>
 <script src="js/player.js"></script>
 <script src="js/vehicles.js"></script>
+<script src="js/weather.js"></script>
+<script src="js/tutorial.js"></script>
 <script src="js/systems.js"></script>
 <script src="js/render.js"></script>
+<script src="js/hud.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>
+<script>document.querySelectorAll('.helptbl').forEach(function (e) { e.appendChild(document.getElementById('helptpl').content.cloneNode(true)); });</script>
 </body>
 </html>

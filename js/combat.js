@@ -13,7 +13,9 @@ function blood(m, n, ang) {
   for (let i = 0; i < n; i++) { const a = (ang === undefined ? rnd(0, TAU) : ang + rnd(-.6, .6)), s = rnd(40, 180); addPart(m.x, m.y, Math.cos(a) * s, Math.sin(a) * s, rnd(.25, .6), rnd(1.5, 3), col); }
   if (Math.random() < .5) addDecal(m.x + rnd(-8, 8), m.y + rnd(-8, 8), rnd(3, 7), col);
 }
-function shake(a) { G.shake = Math.max(G.shake, a); }
+function shake(a) { G.shake = Math.max(G.shake, a * SET.shake); }
+function hitstop(t) { if (SET.hitstop) G.hitstop = Math.max(G.hitstop, t); }
+function addDmgText(x, y, txt, col, big) { if (SET.dmgNums) addText(x, y, txt, col, big); }
 
 function dropPickup(x, y, id, n, gear) {
   if (G.pickups.length > 160) G.pickups.shift();
@@ -26,6 +28,7 @@ function dropTable(table, x, y, mult) {
 
 // ---------- Bruit ----------
 function makeNoise(x, y, R, fromPlayer) {
+  R *= 1 - G.wInt * (G.wType === 'rain' || G.wType === 'storm' ? .3 : 0);
   for (const m of G.mobs) {
     if (m.dead || m.def.fac === 'wild') continue;
     const d = dist(x, y, m.x, m.y); if (d > R) continue;
@@ -91,7 +94,8 @@ function hurtMob(m, dmg, o) {
   if (m.def.armor) d *= (o.kind === 'bullet' || o.kind === 'melee') ? (1 - m.def.armor) : (1 - m.def.armor * .5);
   if (o.crit) d *= 1.8;
   m.hp -= d; m.hitT = .12;
-  addText(m.x + rnd(-6, 6), m.y - m.r - 6, Math.round(d), o.crit ? '#ffd23a' : (o.kind === 'fire' ? '#ff9a3a' : '#fff'), o.crit);
+  addDmgText(m.x + rnd(-6, 6), m.y - m.r - 6, Math.round(d), o.crit ? '#ffd23a' : (o.kind === 'fire' ? '#ff9a3a' : '#fff'), o.crit);
+  if (o.src && o.kind !== 'fire') { G.hitm = { t: .18, kill: false }; SFX.play('hitm', .6); if (o.crit) hitstop(.04); }
   if (o.kind !== 'fire') blood(m, o.crit ? 5 : 3, o.ang);
   if (o.kb) { const k = o.kb * (1 - (m.def.kbres || 0)); m.kx = (m.kx || 0) + Math.cos(o.ang) * k * 6; m.ky = (m.ky || 0) + Math.sin(o.ang) * k * 6; }
   const f = m.def.fac;
@@ -109,6 +113,9 @@ function killMob(m, o) {
   if (m.dead) return; m.dead = true; o = o || {};
   const def = m.def, hostile = def.fac !== 'wild';
   blood(m, 10, o.ang); addDecal(m.x, m.y, rnd(8, 14), def.fac === 'undead' ? '#46661a' : '#7a1010');
+  G.decals.push({ corpse: true, x: m.x, y: m.y, r: m.r, col: def.col, ang: m.aang || 0, life: 50, human: !!def.human }); if (G.decals.length > 300) G.decals.shift();
+  if (o.src) { if (G.hitm) { G.hitm.kill = true; G.hitm.t = .24; } else G.hitm = { t: .24, kill: true }; SFX.play('killm', .7); if (def.hp >= 200 || def.boss) hitstop(.07); else hitstop(.02); }
+  if (def.boss) { G.slowT = .9; }
   SFX.play(def.fac === 'undead' ? 'zdie' : 'thud', .6);
   const hunt = 1 + .15 * P.skills.hunt;
   if (def.fac === 'undead') dropTable(ZDROPS, m.x, m.y, 1 + G.day * .02);
@@ -133,13 +140,15 @@ function killMob(m, o) {
 
 function hurtPlayer(dmg, o) {
   if (P.dead || G.god) return; o = o || {};
-  if (P.veh && !o.pure && !o.ignoreVeh) { vehicleDamage(P.veh, dmg * .6); dmg *= .4; if (P.dead) return; }
+  if (P.veh && !o.pure && !o.ignoreVeh) { { const ab = vstat(P.veh).absorb; vehicleDamage(P.veh, dmg * ab); dmg *= 1 - ab; } if (P.dead) return; }
   const ar = armorValue();
   let d = o.pure ? dmg : dmg * (1 - ar / (ar + 30));
   if (P.painT > 0) d *= .8;
   P.hp -= d; P.hurtT = .3; P.lastHurt = G.clock;
   shake(Math.min(9, 2 + d / 4)); SFX.play('hurt', .8);
-  addText(P.x, P.y - 24, '-' + Math.round(d), '#ff6a5a');
+  addDmgText(P.x, P.y - 24, '-' + Math.round(d), '#ff6a5a');
+  if (o.ang !== undefined && !o.pure) G.dmgInd.push({ a: o.ang + Math.PI, t: .9 });
+  hitstop(.03);
   for (let i = 0; i < 4; i++) addPart(P.x, P.y, rnd(-90, 90), rnd(-90, 90), .4, 2, '#b01818');
   if (o.bleed && Math.random() < o.bleed && !P.bleed) { P.bleed = 1; msg('Vous saignez ! Utilisez un bandage (H).', '#ff6a5a'); }
   if (o.infect && Math.random() < o.infect && !P.infect) { P.infect = 1; msg('Vous êtes infecté ! Il vous faut des antibiotiques.', '#9acd32'); }
@@ -310,7 +319,7 @@ function placeStruct(type, tx, ty, free) {
   G.structs.set(i, s);
   if (def.solid) G.solid[i] = def.solid === 4 ? SO.DOOR : SO.STRUCT;
   SFX.play('build'); G.flowDirty = true;
-  if (!free) { G.stats.built++; questEvent('build', s); }
+  if (!free) { G.stats.built++; questEvent('build', s); tutEvent('build'); for (let i = 0; i < 6; i++) addPart(s.x, s.y, rnd(-70, 70), rnd(-70, 70), .35, 2.5, '#d8c8a0'); }
   return s;
 }
 function removeStructRaw(s) {
@@ -339,8 +348,8 @@ function updateStructs(dt) {
   for (const s of G.structs.values()) {
     if (s.flash > 0) s.flash -= dt;
     if (s.type === 'turret') updateTurret(s, dt);
-    else if (s.type === 'barrel') { if (s.water < 6) s.water = Math.min(6, s.water + dt / 45); }
-    else if (s.type === 'plot' && s.plant === 1 && G.clock - s.t0 > DAY_LEN * 1.2) s.plant = 2;
+    else if (s.type === 'barrel') { if (s.water < 6) s.water = Math.min(6, s.water + dt / 45 * (G.wType === 'rain' || G.wType === 'storm' ? 1 + 3 * G.wInt : 1)); }
+    else if (s.type === 'plot' && s.plant === 1) { if (G.wType === 'rain' || G.wType === 'storm') s.t0 -= dt * .5 * G.wInt; if (G.clock - s.t0 > DAY_LEN * 1.2) s.plant = 2; }
     else if (s.type === 'spikes') {
       s.cd -= dt;
       if (s.cd <= 0) for (const m of G.mobs) if (!m.dead && m.def.fac !== 'wild' && dist(m.x, m.y, s.x, s.y) < 16 + m.r * .5) { hurtMob(m, 12, { kind: 'melee', ang: 0 }); s.cd = .5; s.hp -= 2; if (s.hp <= 0) { damageStruct(s, 999); } break; }

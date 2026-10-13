@@ -21,6 +21,8 @@ function updatePlayer(dt) {
     else { P.staRegenT = (P.staRegenT || 0) - dt; if (P.staRegenT <= 0) P.stam = Math.min(maxStam(), P.stam + (P.hun > 15 ? 20 : 8) * (P.temp < 30 ? .5 : P.temp > 80 ? .6 : 1) * dt); if (P.exhausted && P.stam > 25) P.exhausted = false; }
   }
   P.ang = Math.atan2(G.mouse.y - P.y, G.mouse.x - P.x);
+  P.walk = (P.walk || 0) + (P.moving ? (P.sprint ? 14 : 9) * dt : 0);
+  if (P.sprint && Math.random() < dt * 12) addPart(P.x - ix * 10, P.y - iy * 10 + 6, rnd(-15, 15), rnd(-15, 0), .45, rnd(2, 4), 'rgba(170,150,120,.7)', 'dot');
 
   // bruit des pas
   P.noiseT -= dt;
@@ -65,10 +67,12 @@ function fireGun(w, s) {
     });
   }
   P.bloom = Math.min(.25, P.bloom + s.spr * .25 + .004);
+  { const kk = Math.min(9, 1.5 + s.dmg / 14) * (s.flame ? .2 : 1); G.kick.x -= Math.cos(P.ang) * kk; G.kick.y -= Math.sin(P.ang) * kk; }
+  tutEvent('shots');
   P.flashT = .06; shake(s.flame ? .5 : Math.min(4, s.dmg / 18));
   const snd = s.silenced ? 'silenced' : s.flame ? 'flame' : s.ammo === 'bolt' ? 'bow' : s.pellets ? 'shotgun' : (s.ammo === 'a762' || s.ammo === 'a556') ? 'rifle' : s.auto ? 'smg' : 'pistol';
   SFX.play(snd);
-  if (!s.flame && snd !== 'silenced') for (let i = 0; i < 2; i++) addPart(P.x, P.y, Math.cos(P.ang + 1.6) * rnd(40, 90) + rnd(-20, 20), Math.sin(P.ang + 1.6) * rnd(40, 90), .5, 1.6, '#c8a24a', 'dot');
+  if (!s.flame && snd !== 'silenced') for (let i = 0; i < 2; i++) addPart(P.x, P.y, Math.cos(P.ang + 1.6) * rnd(60, 130) + rnd(-20, 20), Math.sin(P.ang + 1.6) * rnd(60, 130), .55, 3, '#d8b24a', 'shell');
   if (s.noiseR) makeNoise(P.x, P.y, s.noiseR, true);
   if (w.mag <= 0 && ammoReserve(w) > 0) startReload();
 }
@@ -84,7 +88,7 @@ function finishReload(w) {
   const b = WEAPONS[w.id], s = wstat(w), per = AMMO_PER[b.ammo] || 1;
   const need = s.mag - w.mag, units = Math.min(Math.ceil(need / per), invCount(b.ammo));
   invTake(b.ammo, units); w.mag = Math.min(s.mag, w.mag + units * per);
-  P.reloading = false;
+  P.reloading = false; tutEvent('reload'); SFX.play('click');
 }
 
 function toolPower(kind) {
@@ -160,6 +164,9 @@ function survivalTick(dt) {
   if (P.sick > 0) { P.sick -= dt; P.sickT = (P.sickT || 0) - dt; if (P.sickT <= 0) { P.sickT = 3; hurtPlayer(1, { pure: true, cause: 'une intoxication' }); } }
   // température
   const target = 50 + ambientTemp() + armorWarmth();
+  const rainy = (G.wType === 'rain' || G.wType === 'storm') && G.wInt > .3 && !G.inside && !(P.veh && P.veh.def.closed);
+  if (rainy) P.wet = Math.min(1, P.wet + dt * .045 * G.wInt); else P.wet = Math.max(0, P.wet - dt * (P.nearFire ? .12 : .025));
+  if (P.wet > .6 && !P.wetWarn) { msg('💧 Vous êtes trempé : abritez-vous ou séchez-vous près d\'un feu.', '#8ac8ff'); P.wetWarn = true; } if (P.wet < .2) P.wetWarn = false;
   P.temp = clamp(P.temp + (target - P.temp) * Math.min(1, .035 * dt), 0, 100);
   if (P.temp < 15 || P.temp > 93) { P.tempT = (P.tempT || 0) - dt; if (P.tempT <= 0) { P.tempT = 1; hurtPlayer(1.3, { pure: true, cause: P.temp < 15 ? 'le froid' : 'la chaleur' }); } }
   if (P.temp < 30 && !P.coldWarn) { msg('🥶 Vous avez froid ! Approchez-vous d\'un feu, couvrez-vous.', '#8ac8ff'); P.coldWarn = true; } if (P.temp > 38) P.coldWarn = false;
@@ -190,7 +197,8 @@ function ambientTemp() {
   const dayB = { [T.GRASS]: 6, [T.FOREST]: 0, [T.SAND]: 18, [T.DIRT]: 14, [T.ROAD]: 8, [T.FLOOR]: 8, [T.CONC]: 6 }[t] || 4;
   const nightB = { [T.GRASS]: -26, [T.FOREST]: -22, [T.SAND]: -36, [T.DIRT]: -34, [T.ROAD]: -26, [T.FLOOR]: -22, [T.CONC]: -26 }[t] || -26;
   let a = lerp(dayB, nightB, clamp(G.dark / .8, 0, 1));
-  for (const b of G.buildings) if (P.x > b.x * TS && P.x < (b.x + b.w) * TS && P.y > b.y * TS && P.y < (b.y + b.h) * TS) { a = a * .5 + 8; break; }
+  G.inside = false;
+  for (const b of G.buildings) if (P.x > b.x * TS && P.x < (b.x + b.w) * TS && P.y > b.y * TS && P.y < (b.y + b.h) * TS) { a = a * .5 + 8; G.inside = true; break; }
   let fire = 0;
   for (const s of G.structs.values()) if (s.type === 'campfire') { const d = dist(P.x, P.y, s.x, s.y); if (d < 170) fire = Math.max(fire, 1 - d / 170); }
   if (!G.fireObjs) G.fireObjs = [...G.objs.values()].filter(o => o.k === 'fire');
@@ -198,6 +206,8 @@ function ambientTemp() {
   for (const g of G.fires) { const d = dist(P.x, P.y, g.x, g.y); if (d < g.r + 120) fire = Math.max(fire, .8); }
   a += fire * 32;
   if (P.veh) a += 12;
+  a -= G.wInt * (G.wType === 'storm' ? 9 : G.wType === 'rain' ? 6 : G.wType === 'fog' ? 2 : 0) + 11 * P.wet;
+  if (fire > .3) P.nearFire = true; else P.nearFire = false;
   if (radAt(P.x, P.y) > 0) a += 4;
   return a;
 }
@@ -219,6 +229,7 @@ function useConsumable(id) {
   if (u.cure) for (const c of u.cure) { if (c === 'bleed') P.bleed = 0; if (c === 'infect') P.infect = 0; if (c === 'sick') P.sick = 0; }
   if (u.sick && Math.random() < u.sick) { P.sick = 40; msg('Vous ne vous sentez pas bien... (intoxication)', '#9acd32'); }
   if (it.t === 'med') { P.healCd = .8; SFX.play('pickup'); } else SFX.play(it.t === 'drink' ? 'drink' : 'eat');
+  tutEvent('consume');
   if (id === 'painkiller') P.painT = 25;
   return true;
 }
@@ -250,7 +261,7 @@ function collectPickups(dt) {
     if (p.t > .35 && d < 24) {
       if (p.gear) { giveGear(p.gear.kind, p.gear.id); G.pickups.splice(i, 1); continue; }
       const got = invAdd(p.id, p.n);
-      if (got > 0) { msg('+' + got + ' ' + ITEMS[p.id].n, '#9fd69f'); SFX.play('pickup', .7); questCheckSoon(); }
+      if (got > 0) { toastItem(p.id, got); SFX.play('pickup', .7); questCheckSoon(); }
       if (got >= p.n) G.pickups.splice(i, 1);
       else { p.n -= got; if (got === 0 && G.clock - (G.fullMsg || 0) > 3) { msg('Inventaire plein !', '#e0a050'); G.fullMsg = G.clock; } }
     }
@@ -334,7 +345,7 @@ function drinkWater() {
 }
 
 function openCrate(o) {
-  o.opened = true; const got = []; SFX.play('pickup');
+  o.opened = true; for (let i = 0; i < 10; i++) addPart(o.x, o.y, rnd(-90, 90), rnd(-110, -20), .6, 2.5, '#ffe9a0', 'fire'); const got = []; SFX.play('pickup');
   for (const k in o.loot) { giveItem(k, o.loot[k], true); got.push(ITEMS[k].i + o.loot[k]); }
   for (const g of o.gear) { giveGear(g.kind, g.id, true); const nm = g.kind === 'w' ? WEAPONS[g.id].n : g.kind === 'a' ? ARMOR[g.id].n : ITEMS[g.id].n; got.push('★ ' + nm); }
   msg((got.length ? 'Trouvé : ' + got.join('  ') : 'La caisse est vide.'), '#ffd070');
