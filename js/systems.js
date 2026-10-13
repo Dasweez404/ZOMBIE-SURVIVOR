@@ -5,7 +5,7 @@
 function questDef(id, st) { return (st && st.def) || QUESTS.find(q => q.id === id); }
 function questDone(id) { return !!G.quests.done[id]; }
 function questAvailable(npcId) {
-  return QUESTS.filter(q => q.giver === npcId && !questDone(q.id) && !G.quests.active[q.id] && (q.req || []).every(r => questDone(r)));
+  return QUESTS.filter(q => q.giver === npcId && !questDone(q.id) && !G.quests.active[q.id] && (q.req || []).every(r => questDone(r)) && q.objs.every(o => o.t !== 'clear' || G.pois.some(p => p.type === o.poi)));
 }
 function acceptQuest(q) {
   const st = { id: q.id, kills: {}, poi: null };
@@ -113,6 +113,15 @@ function activatePOI(p) {
   } else if (p.type === 'legion') {
     const n = scale(rint(7, 9)); for (let i = 0; i < n; i++) put(pick(['legion', 'legion', 'legion_sn', 'legion_hv']));
     put('legion_cmd');
+  } else if (p.def.mix) {
+    const n = scale(rint(p.def.z[0], p.def.z[1]));
+    for (let i = 0; i < n; i++) { const t = G.rng.wpick(p.def.mix); if (t === 'rats') { for (let k = 0; k < 4; k++) put('rats'); } else put(t); }
+    if (p.def.wildmix) for (let i = 0; i < 3; i++) put(G.rng.wpick(p.def.wildmix), { poi: null });
+    if (p.def.boss) {
+      const [bt, hm, nm] = p.def.boss; const bp = p.queenPos || null; let m = null;
+      if (bp) m = spawnMob(bt, bp[0], bp[1], { poi: p.id, hpMul: hm }); else m = put(bt, { hpMul: hm });
+      if (m && nm) m.name = nm; if (m && bt !== 'queen') m.r *= 1.2;
+    }
   } else if (p.def.z) {
     const n = scale(rint(p.def.z[0], p.def.z[1]));
     for (let i = 0; i < n; i++) {
@@ -124,7 +133,7 @@ function activatePOI(p) {
 }
 function updatePOIs() {
   for (const p of G.pois) {
-    if (p.hidden || p.type === 'village') continue;
+    if (p.hidden || p.type === 'village' || p.def.friendly) continue;
     if (!p.spawned && dist(P.x, P.y, p.cx, p.cy) < 1000 && !p.cleared) activatePOI(p);
     if (p.spawned && !p.cleared) {
       if (!G.mobs.some(m => !m.dead && m.poi === p.id)) {
@@ -247,7 +256,7 @@ function spawnAirdrop() {
 function spawnAmbush() {
   const n = 3 + Math.floor(G.day / 2); const a0 = rnd(0, TAU);
   for (let i = 0; i < n; i++) {
-    for (let k = 0; k < 20; k++) { const a = a0 + rnd(-.5, .5), d = rnd(520, 640), x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d; if (!collide(x, y, 12, false) && !(G.village && dist(x, y, G.village.cx, G.village.cy) < G.village.safe)) { const m = spawnMob(pick(['raider', 'raider_sg', 'raider_smg']), x, y, { ambient: true, state: 'combat' }); m.alertT = 15; break; } }
+    for (let k = 0; k < 20; k++) { const a = a0 + rnd(-.5, .5), d = rnd(520, 640), x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d; if (!collide(x, y, 12, false) && !inSafeZone(x, y)) { const m = spawnMob(pick(['raider', 'raider_sg', 'raider_smg']), x, y, { ambient: true, state: 'combat' }); m.alertT = 15; break; } }
   }
   msg('Des pillards vous tendent une embuscade !', '#ff8a7a'); SFX.play('alarm');
 }
@@ -258,7 +267,7 @@ function spawnHorde() {
     for (let k = 0; k < 20; k++) {
       const a = a0 + rnd(-.7, .7), d = rnd(700, 950), x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d;
       if (x < 60 || y < 60 || x > G.W * TS - 60 || y > G.H * TS - 60 || collide(x, y, 12, false)) continue;
-      if (G.village && dist(x, y, G.village.cx, G.village.cy) < G.village.safe) continue;
+      if (inSafeZone(x, y)) continue;
       spawnMob(pickZombieType(true), x, y, { horde: true, state: 'chase', ambient: true }); c++; break;
     }
   }
@@ -283,7 +292,7 @@ function updateEvents(dt) {
       if (!G.assault) { if (dist(P.x, P.y, b.cx, b.cy) < 2300) startAssault(b); else abstractAssault(b); }
     }
   }
-  if (G.ambushAt && G.clock > G.ambushAt && !isNight()) { G.ambushAt = 0; if (!(G.village && dist(P.x, P.y, G.village.cx, G.village.cy) < G.village.safe)) spawnAmbush(); }
+  if (G.ambushAt && G.clock > G.ambushAt && !isNight()) { G.ambushAt = 0; if (!inSafeZone(P.x, P.y)) spawnAmbush(); }
   updateAssault(dt);
 }
 
@@ -305,11 +314,11 @@ function updateSpawning(dt) {
       for (let k = 0; k < 10; k++) {
         const a = rnd(0, TAU), d = rnd(680, 960), x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d;
         if (x < 60 || y < 60 || x > G.W * TS - 60 || y > G.H * TS - 60 || collide(x, y, 12, false)) continue;
-        if (G.village && dist(x, y, G.village.cx, G.village.cy) < G.village.safe) continue;
+        if (inSafeZone(x, y)) continue;
         const bb = baseAt(x, y); if (bb) continue;
         let inB = false; for (const b of G.buildings) if (x > (b.x - 1) * TS && x < (b.x + b.w + 1) * TS && y > (b.y - 1) * TS && y < (b.y + b.h + 1) * TS) inB = true;
         if (inB) continue;
-        const m = spawnMob(pickZombieType(night), x, y, { ambient: true, state: 'wander' });
+        const zt = pickZombieType(night, x, y); const m = spawnMob(zt, x, y, { ambient: true, state: 'wander' }); if (zt === 'rats') for (let q = 0; q < 4; q++) spawnMob('rats', x + rnd(-24, 24), y + rnd(-24, 24), { ambient: true, state: 'wander' });
         if (night && Math.random() < .35) { m.state = 'investigate'; m.ix = P.x + rnd(-100, 100); m.iy = P.y + rnd(-100, 100); m.it = 25; }
         break;
       }
@@ -323,7 +332,7 @@ function updateSpawning(dt) {
         for (let k = 0; k < 8; k++) {
           const a = rnd(0, TAU), d = rnd(800, 1500), x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d;
           if (x < 80 || y < 80 || x > G.W * TS - 80 || y > G.H * TS - 80 || collide(x, y, 12, false)) continue;
-          const t = G.rng.wpick([['rabbit', 40], ['deer', 25], ['boar', 20], ['wolf', 15]]);
+          const tl = G.tiles[IDX(Math.floor(x / TS), Math.floor(y / TS))]; const t = G.rng.wpick([['rabbit', 40], ['deer', 25], ['boar', 20], ['wolf', 15], ['spider', tl === T.FOREST ? 14 : 2], ['scorpion', tl === T.DIRT || tl === T.SAND ? 16 : 1]]);
           spawnMob(t, x, y, {}); break;
         }
       }
@@ -358,7 +367,7 @@ function updateGame(dt) {
   updateNPCs(dt);
   separateAll(dt);
   updateVehicles(dt); updateRadFx(dt); updateWeather(dt);
-  updateBullets(dt); updateFires(dt); updateBurning(dt); updateThrown(dt); updateStructs(dt);
+  updateClouds(dt); updateBullets(dt); updateFires(dt); updateBurning(dt); updateThrown(dt); updateStructs(dt);
   updateSpawning(dt); updateEvents(dt);
   G.poiT -= dt; if (G.poiT <= 0) { G.poiT = .6; updatePOIs(); updateRegrow(); }
   if (G.qDirty) checkQuests();
@@ -469,7 +478,7 @@ function initGame(opts) {
   const seed = opts.seed || Math.floor(Math.random() * 1e9);
   G = {
     W: (WORLD_SIZES[(opts.wo || {}).size] || WORLD_SIZES.M).v, H: (WORLD_SIZES[(opts.wo || {}).size] || WORLD_SIZES.M).v, wo: Object.assign({ size: 'M', style: 'balanced', dens: 1 }, opts.wo || {}), style: (opts.wo || {}).style || 'balanced', dens: (opts.wo || {}).dens === undefined ? 1 : opts.wo.dens, seed, diff: opts.diff === undefined ? 1 : opts.diff, clock: DAY_LEN * 0.12, playTime: 0, day: 1, dark: 0, tick: 0,
-    mobs: [], friends: [], npcs: [], bullets: [], pickups: [], parts: [], texts: [], decals: [], fires: [], blasts: [], thrown: [], mines: [], msgs: [], depleted: [],
+    mobs: [], clouds: [], friends: [], npcs: [], bullets: [], pickups: [], parts: [], texts: [], decals: [], fires: [], blasts: [], thrown: [], mines: [], msgs: [], depleted: [],
     toasts: [], dmgInd: [], banner: null, hitm: null, fadeIn: 1.4, kick: { x: 0, y: 0 }, hitstop: 0, tscale: 1, slowT: 0, heartT: 0, tipT: 3, droneT: 0, edgeT: 0, keys: {}, mouse: { x: 0, y: 0, sx: 0, sy: 0 }, lmb: false, rmb: false, lmbEdge: false, shake: 0, cam: { x: 0, y: 0 }, paused: false,
     quests: { active: {}, done: {}, tracked: null, contractN: 0 }, stats: { kills: 0, zkills: 0, built: 0, looted: 0, gathered: 0, quests: 0, bases: 0, assaults: 0 },
     flowP: new Flow(84), flowB: new Flow(84), flowT: 0, flowDirty: false, ambT: 3, wildT: 5, cullT: 3, poiT: 0, saveT: 90, qDirty: false, hordeDay: 0, radioOn: false, assault: null,
@@ -490,6 +499,7 @@ function initGame(opts) {
   const v = G.village; const guns = ['pistol', 'shotgun', 'pistol', 'ar', 'smg'];
   v.guardSpots.forEach((s, i) => makeGuard(s[0] * TS + 16, s[1] * TS + 16, guns[i % guns.length]));
   v.discovered = false;
+  if (G.nomads) G.nomads.guardSpots.forEach((s, i) => makeGuard(s[0] * TS + 16, s[1] * TS + 16, i ? 'shotgun' : 'ar'));
   if (!opts.load) giveStart();
   revealAround(Math.floor(P.x / TS), Math.floor(P.y / TS), 16);
   G.flowP.compute(Math.floor(P.x / TS), Math.floor(P.y / TS));

@@ -237,13 +237,20 @@ const TRADE_STOCK = [
   ['i', 'antirad', 4, 40], ['i', 'fuel', 3, 20], ['a', 'gasmask', 0, 130], ['a', 'hazmat', 0, 260],
   ['i', 'plan_vehicle', 0, 190], ['i', 'plan_guns', 0, 120], ['i', 'plan_med', 0, 100], ['i', 'plan_turret', 0, 170], ['i', 'plan_fort', 0, 130], ['i', 'plan_armor', 0, 190], ['i', 'plan_optics', 0, 160], ['i', 'plan_serum', 0, 180], ['i', 'plan_fire', 0, 260],
 ];
+const NOMAD_STOCK = [
+  ['i', 'fuel', 4, 24], ['i', 'a556', 15, 30], ['i', 'a762', 8, 28], ['i', 'a9', 24, 18], ['i', 'shell', 8, 15], ['i', 'medkit', 1, 60], ['i', 'antirad', 3, 36], ['i', 'seed', 6, 10], ['i', 'grenade', 2, 40],
+  ['i', 'scope', 1, 90], ['i', 'reddot', 1, 60], ['i', 'suppr', 1, 80], ['i', 'magext', 1, 60], ['i', 'laser', 1, 70],
+  ['a', 'gasmask', 0, 120], ['a', 'hazmat', 0, 240], ['a', 'helmet_mil', 0, 190], ['w', 'ar', 0, 420], ['w', 'hunter', 0, 380],
+  ['i', 'plan_vehicle', 0, 160], ['i', 'plan_turret', 0, 150], ['i', 'plan_optics', 0, 140],
+];
+function stockOf() { return dialogNpc && dialogNpc.id === 'nomad' ? NOMAD_STOCK : TRADE_STOCK; }
 function discount() { return P.rep >= 60 ? .8 : P.rep >= 30 ? .9 : 1; }
 function openDialog(npc) {
   dialogNpc = npc; G.paused = true; panelTab = 'dialog'; $('panel').classList.add('hidden'); $('dialog').classList.remove('hidden'); renderDialog(); SFX.play('ui');
 }
 function renderDialog() {
   const n = dialogNpc, el = $('dialog'); let h = '<div class="tabs"><span class="ptitle">' + esc(n.name) + '</span><button class="tab close" data-act="close">✖</button></div><div class="pbody">';
-  const greet = { mara: 'Je commande la défense de Fort Espoir. Les morts s\'amassent... on a besoin de gens comme toi.', jonas: 'Capsules, ferraille, plans... tout se vend, tout s\'achète.', doc: 'Les blessés affluent. Je soigne ce que je peux.' }[n.id];
+  const greet = { mara: 'Je commande la défense de Fort Espoir. Les morts s\'amassent... on a besoin de gens comme toi.', jonas: 'Capsules, ferraille, plans... tout se vend, tout s\'achète.', nomad: 'Je parcours les routes avec mes caravanes : carburant, optiques, plans rares… si tu as des capsules, j\'ai de quoi t\'équiper.', doc: 'Les blessés affluent. Je soigne ce que je peux.' }[n.id];
   h += '<p class="say">« ' + greet + ' »</p>';
   const ready = Object.values(G.quests.active).filter(st => { const q = questDef(st.id, st); return q && q.giver === n.id && st.ready; });
   for (const st of ready) { const q = questDef(st.id, st); h += '<div class="quest ready"><h4>✔ ' + esc(q.title) + '</h4><p>Terminée ! Récompense : ' + rewText(q.rew) + '</p><button data-act="turnin" data-a="' + st.id + '">Rendre la quête</button></div>'; }
@@ -261,13 +268,13 @@ function renderDialog() {
     const free = G.docDay !== G.day;
     h += '<div class="quest"><h4>Soins</h4><button data-act="heal"' + (free ? '' : ' disabled') + '>Soins complets (gratuit, 1×/jour)</button> <button data-act="cure"' + (invCount('caps') >= 20 && (P.infect || P.sick > 0 || P.bleed) ? '' : ' disabled') + '>Soigner infection/saignement (🪙 20)</button></div>';
   }
-  if (n.id === 'jonas') h += tradeHTML();
+  if (n.id === 'jonas' || n.id === 'nomad') h += tradeHTML();
   h += '</div>'; el.innerHTML = h;
 }
 function sellPrice(id) { return Math.max(1, Math.floor((ITEMS[id].v || 1) * .45)); }
 function tradeHTML() {
   let h = '<h3>Acheter <small>(🪙 ' + invCount('caps') + ')</small></h3><div class="list">';
-  TRADE_STOCK.forEach((s, i) => {
+  stockOf().forEach((s, i) => {
     const [k, id, qty, price] = s; const pr = Math.round(price * discount());
     const it = k === 'i' ? ITEMS[id] : k === 'w' ? WEAPONS[id] : ARMOR[id];
     const owned = k === 'i' && ITEMS[id].t === 'plan' && P.known[ITEMS[id].plan];
@@ -326,7 +333,7 @@ const ACT = {
   heal() { if (G.docDay === G.day) return; G.docDay = G.day; P.hp = maxHP(); P.bleed = 0; P.infect = 0; P.sick = 0; msg('Le Dr Lin vous a soigné.', '#8affb0'); SFX.play('levelup'); renderDialog(); },
   cure() { if (invCount('caps') < 20) return; invTake('caps', 20); P.bleed = 0; P.infect = 0; P.sick = 0; msg('Soigné !', '#8affb0'); renderDialog(); },
   buy(a) {
-    const [k, id, qty, price] = TRADE_STOCK[+a]; const pr = Math.round(price * discount()); if (invCount('caps') < pr) return;
+    const [k, id, qty, price] = stockOf()[+a]; const pr = Math.round(price * discount()); if (invCount('caps') < pr) return;
     invTake('caps', pr);
     if (k === 'i') giveItem(id, qty || 1); else if (k === 'w') giveWeapon(makeWeapon(id)); else giveArmorInst(makeArmor(id));
     SFX.play('pickup'); renderDialog();

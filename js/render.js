@@ -5,7 +5,7 @@ const TCOL = {
   [T.SAND]: ['#cdb57d', '#c8b077', '#d2ba84'], [T.DIRT]: ['#8b7355', '#866a4b', '#917a5a'], [T.ROAD]: ['#3d3f45', '#414349', '#3a3c42'],
   [T.FLOOR]: ['#8b6b45', '#866640', '#906f49'], [T.CONC]: ['#7b7d80', '#777a7d', '#7f8184'], [T.WALLT]: ['#3b3a3d'], [T.PALI]: ['#6a5030'], [T.WATER]: ['#2d5d8a'],
 };
-const MINICOL = { [T.GRASS]: '#3f6b30', [T.FOREST]: '#2d5226', [T.SAND]: '#bba670', [T.WATER]: '#2a5a8a', [T.ROAD]: '#6a6c72', [T.DIRT]: '#7a6347', [T.FLOOR]: '#8a6d46', [T.CONC]: '#8a8c90', [T.WALLT]: '#222', [T.PALI]: '#5a4020' };
+const MINICOL = { [T.GRASS]: '#3f6b30', [T.FOREST]: '#2d5226', [T.SAND]: '#bba670', [T.WATER]: '#2a5a8a', [T.ROAD]: '#6a6c72', [T.DIRT]: '#7a6347', [T.FLOOR]: '#8a6d46', [T.CONC]: '#8a8c90', [T.TILE]: '#c8d2da', [T.FLESH]: '#8a3a5a', [T.WALLT]: '#222', [T.PALI]: '#5a4020' };
 
 let cvs, ctx, lightCvs, lightCtx, VW = 800, VH = 600, DPR = 1;
 function resizeCanvas() {
@@ -66,7 +66,7 @@ function render(time) {
   for (const f of G.friends) if (!f.dead && f.x > cx - 60 && f.x < cx + VW + 60 && f.y > cy - 60 && f.y < cy + VH + 60) drawFriend(c, f, time);
   if (!P.dead) drawPlayer(c, time);
   drawBullets(c);
-  drawFires(c, time); drawParts(c); drawBlasts(c); drawBolts(c); drawTutMarker(c, time);
+  drawClouds(c, time); drawFires(c, time); drawParts(c); drawBlasts(c); drawBolts(c); drawTutMarker(c, time);
   drawFlags(c, time);
   drawRoofs(c, cx, cy);
   drawTexts(c);

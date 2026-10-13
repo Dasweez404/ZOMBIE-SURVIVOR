@@ -74,6 +74,7 @@ function updateBullets(dt) {
         }
       } else {
         if (!P.dead && Math.hypot(P.x - b.x, P.y - b.y) < P.r + b.r) {
+          if (b.kind === 'web') { P.slowT = 3; if (G.clock - (G.webMsg || 0) > 4) { msg('🕸️ Pris dans une toile ! (ralenti)', '#d8d8d8'); G.webMsg = G.clock; } }
           hurtPlayer(b.dmg, { kind: b.kind, ang: Math.atan2(b.vy, b.vx), infect: b.kind === 'acid' ? .25 : 0, cause: b.cause });
           dead = true; break;
         }
@@ -91,6 +92,8 @@ function updateBullets(dt) {
 function hurtMob(m, dmg, o) {
   if (m.dead) return; o = o || {};
   let d = dmg;
+  if (m.def.fireproof && o.kind === 'fire') return;
+  if (m.def.shield && (o.kind === 'bullet' || o.kind === 'melee') && o.ang !== undefined && Math.abs(angDiff(m.aang, o.ang + Math.PI)) < 1.05) { d *= .15; addText(m.x, m.y - m.r - 6, 'BLOQUÉ', '#9ac8ff'); for (let i = 0; i < 4; i++) addPart(m.x + Math.cos(m.aang) * m.r, m.y + Math.sin(m.aang) * m.r, rnd(-80, 80), rnd(-80, 80), .25, 2, '#cfe8ff', 'dot'); SFX.play('click', .7); }
   if (m.def.armor) d *= (o.kind === 'bullet' || o.kind === 'melee') ? (1 - m.def.armor) : (1 - m.def.armor * .5);
   if (o.crit) d *= 1.8;
   m.hp -= d; m.hitT = .12;
@@ -127,6 +130,10 @@ function killMob(m, o) {
     for (const e of def.drops) if (Math.random() < e[1] * (e[1] < 1 ? hunt : 1)) dropPickup(m.x + rnd(-10, 10), m.y + rnd(-10, 10), e[0], Math.round(rint(e[2], e[3]) * (hunt > 1 && Math.random() < hunt - 1 ? 1.5 : 1)));
   }
   if (def.explode) explode(m.x, m.y, 105, 38, { team: 'h', toxic: 1, cause: 'un Gonflé' });
+  if (def.trail) addCloud(m.x, m.y, 55, 6, 'toxic');
+  if (def.aura) addCloud(m.x, m.y, 60, 8, 'rad');
+  if (def.ignite) { addFire(m.x, m.y, 46, 5); }
+  if (m.t === 'queen') { banner('☠ REINE VAINCUE', 'La ruche s\'effondre…', '#ff8ad0'); for (const z of G.mobs) if (!z.dead && z.t && (z.t === 'crawler' || z.t === 'rats') && dist(z.x, z.y, m.x, m.y) < 900) z.hp = 1; }
   if (def.boss) {
     msg(def.n + ' vaincu !', '#ffd070'); shake(14);
     for (let i = 0; i < 3; i++) { const rr = rollRare(def.fac === 'legion' ? 'legion' : 'bunker', G.rng); if (rr) dropPickup(m.x + rnd(-20, 20), m.y + rnd(-20, 20), null, 1, { kind: rr.kind, id: rr.id }); }
@@ -164,6 +171,20 @@ function hurtFriend(f, d) {
     else if (f.kind === 'recruit') msg('Votre garde ' + f.name + ' est tombé...', '#ff8a7a');
     else if (f.kind === 'guard') { f.respawn = G.clock + DAY_LEN * 0.8; }
     addDecal(f.x, f.y, 10, '#7a1010');
+  }
+}
+
+// ---------- Nuages (gaz toxiques, radiations) ----------
+function addCloud(x, y, r, life, kind) { if (G.clouds.length > 40) G.clouds.shift(); G.clouds.push({ x, y, r, life, max: life, kind, tick: 0 }); }
+function updateClouds(dt) {
+  for (let i = G.clouds.length - 1; i >= 0; i--) {
+    const k = G.clouds[i]; k.life -= dt; k.tick -= dt;
+    if (k.tick <= 0) {
+      k.tick = .4;
+      if (!P.dead && dist(k.x, k.y, P.x, P.y) < k.r + 8) { if (k.kind === 'rad') P.rad = Math.min(100, P.rad + 1.6 * (1 - radResist())); else { hurtPlayer(1.4, { pure: true, infect: .02, cause: 'un nuage toxique' }); P.slowT = Math.max(P.slowT, .6); } }
+      for (const f of G.friends) if (!f.dead && dist(k.x, k.y, f.x, f.y) < k.r) hurtFriend(f, 1.2);
+    }
+    if (k.life <= 0) G.clouds.splice(i, 1);
   }
 }
 

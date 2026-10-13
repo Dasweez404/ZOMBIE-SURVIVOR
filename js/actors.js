@@ -6,7 +6,7 @@ function newPlayer() {
     x: G.spawn.x, y: G.spawn.y, r: 12, hp: 100, hun: 100, thi: 100, stam: 100, ang: 0, vx: 0, vy: 0,
     inv: {}, gear: [], slots: [null, null, null, null, null], sel: 0, armor: { head: null, body: null, feet: null }, pack: 0,
     known: {}, skills: { str: 0, end: 0, aim: 0, craft: 0, hunt: 0, carry: 0 }, sp: 0, lvl: 1, xp: 0,
-    bleed: 0, infect: 0, sick: 0, temp: 50, rad: 0, wet: 0, veh: null, burn: 0, painT: 0, cd: 0, reload: 0, reloading: false, bloom: 0, swing: 0, swingA: 0, hurtT: 0,
+    bleed: 0, infect: 0, sick: 0, temp: 50, rad: 0, wet: 0, slowT: 0, veh: null, burn: 0, painT: 0, cd: 0, reload: 0, reloading: false, bloom: 0, swing: 0, swingA: 0, hurtT: 0,
     gadSel: 0, gadCd: 0, rep: 0, dead: false, flashT: 0, useCd: 0, noiseT: 0, sprint: false, moving: false, healCd: 0, mealCd: 0, lastHurt: -99,
   };
   return p;
@@ -32,15 +32,25 @@ function spawnMob(type, x, y, o) {
   G.mobs.push(m); return m;
 }
 
-function pickZombieType(night) {
-  const d = G.day, r = Math.random();
-  const t = [['walker', 60]];
+function pickZombieType(night, x, y) {
+  const d = G.day, t = [['walker', 60]];
+  const tile = (x !== undefined && inb(Math.floor(x / TS), Math.floor(y / TS))) ? G.tiles[IDX(Math.floor(x / TS), Math.floor(y / TS))] : T.GRASS;
+  const dry = tile === T.DIRT || tile === T.SAND, wet = tile === T.FOREST;
   t.push(['runner', d >= 2 ? 14 + (night ? 12 : 0) : 0]);
+  t.push(['crawler', d >= 2 ? 9 : 0]);
+  t.push(['rats', d >= 2 ? 7 : 0]);
+  t.push(['leaper', d >= 3 ? 7 : 0]);
   t.push(['spitter', d >= 3 ? 7 + d : 0]);
   t.push(['screamer', d >= 3 ? 4 + (night ? 4 : 0) : 0]);
   t.push(['bloater', d >= 4 ? 5 + d * .6 : 0]);
+  t.push(['toxic', d >= 4 ? (wet ? 9 : 5) : 0]);
+  t.push(['burner', night && dry && d >= 4 ? 11 : (dry && d >= 6 ? 4 : 0)]);
   t.push(['brute', d >= 5 ? 3 + d * .5 : 0]);
+  t.push(['charger', d >= 5 ? 4 : 0]);
+  t.push(['riot', d >= 6 ? 3 : 0]);
   t.push(['zsoldier', d >= 7 ? 4 + d * .4 : 0]);
+  t.push(['necro', d >= 7 ? (night ? 3 : 1) : 0]);
+  if (x !== undefined && G.radZones.some(z => dist(x, y, z.x, z.y) < z.r + 900)) t.push(['ghoul', 24]);
   return G.rng.wpick(t.filter(e => e[1] > 0));
 }
 
@@ -98,6 +108,10 @@ function updateMob(m, dt) {
 
 function updateUndead(m, dt) {
   const def = m.def, night = isNight();
+  if (def.trail && m.state !== 'idle') { m.trT = (m.trT || 0) - dt; if (m.trT <= 0) { m.trT = .85; addCloud(m.x, m.y, 30, 4.5, 'toxic'); } }
+  if (def.aura && !P.dead) { const dd = dist(m.x, m.y, P.x, P.y); if (dd < 170) { P.rad = Math.min(100, P.rad + 1.0 * (1 - radResist()) * dt * (1 - dd / 220)); } if (Math.random() < dt * 8) addPart(m.x + rnd(-8, 8), m.y + rnd(-8, 8), rnd(-8, 8), rnd(-30, -10), rnd(.5, 1), rnd(2, 3), '#9aff3a', 'fire'); }
+  if (def.ignite && Math.random() < dt * 10) addPart(m.x + rnd(-6, 6), m.y + rnd(-6, 6), rnd(-10, 10), rnd(-45, -20), rnd(.4, .8), rnd(2, 4), '#ff8a2a', 'fire');
+  if (m.stun > 0) { m.stun -= dt; return; }
   const sight = (night ? 330 : 400) * (P.crouch ? .6 : 1) * weatherMul();
   let tgt = null;
   if (m.horde || m.assault) tgt = mobTarget(m, 1e5); else tgt = mobTarget(m, sight);
@@ -120,6 +134,7 @@ function updateUndead(m, dt) {
   if (m.state === 'chase') {
     if (!tgt) { m.chaseT -= dt; if (m.chaseT <= 0) m.state = 'wander'; wanderMob(m, dt, .6); return; }
     const d = dist(m.x, m.y, tgt.x, tgt.y);
+    if (specialUndead(m, tgt, d, dt)) return;
     if (def.ranged) { // cracheur : garde ses distances
       if (d > 230 || !los(m.x, m.y, tgt.x, tgt.y)) steer(m, tgt.x, tgt.y, m.spd, dt);
       else if (d < 150) { const a = ang(tgt.x, tgt.y, m.x, m.y); moveEnt(m, Math.cos(a) * m.spd * dt, Math.sin(a) * m.spd * dt, false); }
@@ -150,6 +165,33 @@ function updateUndead(m, dt) {
   } else wanderMob(m, dt, def.spd > 90 ? .5 : .4);
   if (m.state === 'chase' || m.state === 'investigate') { m.groan = (m.groan || rnd(2, 8)) - dt; if (m.groan <= 0) { m.groan = rnd(4, 10); if (dist(m.x, m.y, P.x, P.y) < 500) SFX.play('groan', Math.max(.2, 1 - dist(m.x, m.y, P.x, P.y) / 500)); } }
 }
+function specialUndead(m, tgt, d, dt) {
+  const def = m.def, treach = (tgt === P ? (P.veh ? P.veh.def.r : P.r) : tgt.r) + m.r + 8;
+  if (def.leap) {
+    if (m.leapT > 0) { m.leapT -= dt; const hit = moveEnt(m, m.leapV[0] * dt, m.leapV[1] * dt, false); m.aang = Math.atan2(m.leapV[1], m.leapV[0]); if (hit) m.leapT = 0; if (!m.leapHit && d < treach) { m.leapHit = true; m.cd = 0; zombieStrike(m, tgt, .01); m.leapT = 0; } return true; }
+    m.leapCd = (m.leapCd == null ? rnd(1, 3) : m.leapCd) - dt;
+    if (m.leapCd <= 0 && d > 90 && d < 300 && los(m.x, m.y, tgt.x, tgt.y)) { const a = ang(m.x, m.y, tgt.x, tgt.y); m.leapT = .34; m.leapHit = false; m.leapV = [Math.cos(a) * 560, Math.sin(a) * 560]; m.leapCd = rnd(2.6, 4.2); SFX.play('whoosh', .7); return true; }
+  }
+  if (def.charge) {
+    if (m.windup > 0) { m.windup -= dt; if (m.windup > .25) m.aang = ang(m.x, m.y, tgt.x, tgt.y); if (m.windup <= 0) { m.chargeT = .9; m.cdir = [Math.cos(m.aang), Math.sin(m.aang)]; SFX.play('screech', .6); } return true; }
+    if (m.chargeT > 0) {
+      m.chargeT -= dt; const hit = moveEnt(m, m.cdir[0] * 640 * dt, m.cdir[1] * 640 * dt, false);
+      if (dist(m.x, m.y, tgt.x, tgt.y) < treach) { m.cd = 0; m.dmg *= 1.5; zombieStrike(m, tgt, .01); m.dmg /= 1.5; if (tgt === P) { P.vx += m.cdir[0] * 520; P.vy += m.cdir[1] * 520; } m.chargeT = 0; }
+      if (hit) { m.stun = 1.5; m.chargeT = 0; shake(6); SFX.play('thud', .9); addText(m.x, m.y - 20, 'ÉTOURDI', '#ffe070'); for (let i = 0; i < 8; i++) addPart(m.x, m.y, rnd(-90, 90), rnd(-90, 90), .4, 2.5, '#bbb'); }
+      return true;
+    }
+    m.chargeCd = (m.chargeCd == null ? 1.5 : m.chargeCd) - dt;
+    if (m.chargeCd <= 0 && d > 100 && d < 480 && los(m.x, m.y, tgt.x, tgt.y)) { m.windup = .75; m.chargeCd = rnd(5, 7); addText(m.x, m.y - 24, '!', '#ff5050', true); return true; }
+  }
+  if (def.summon) {
+    m.aang = ang(m.x, m.y, tgt.x, tgt.y);
+    if (d < 220) { const a = ang(tgt.x, tgt.y, m.x, m.y); moveEnt(m, Math.cos(a) * m.spd * 1.2 * dt, Math.sin(a) * m.spd * 1.2 * dt, false); } else if (d > 340) steer(m, tgt.x, tgt.y, m.spd, dt);
+    m.sumT = (m.sumT == null ? 2.5 : m.sumT) - dt;
+    if (m.sumT <= 0) { m.sumT = 7; m.minions = (m.minions || []).filter(z => !z.dead); if (m.minions.length < 6) { for (let k = 0; k < 2; k++) { const z = spawnMob('walker', m.x + rnd(-40, 40), m.y + rnd(-40, 40), { state: 'chase', ambient: true }); m.minions.push(z); } for (let k = 0; k < 14; k++) { const a = rnd(0, TAU); addPart(m.x + Math.cos(a) * 20, m.y + Math.sin(a) * 20, Math.cos(a) * 40, Math.sin(a) * 40, .6, 3, '#b070ff', 'fire'); } addPart(m.x, m.y, 0, 0, .7, 50, '#b070ff', 'ring'); SFX.play('screech', .5); addText(m.x, m.y - 24, 'Debout !', '#d8a8ff', true); } }
+    return true;
+  }
+  return false;
+}
 function wanderMob(m, dt, f) {
   m.wt -= dt;
   if (m.wt <= 0) {
@@ -172,13 +214,20 @@ function zombieStrike(m, tgt, dt) {
   if (m.cd <= 0) {
     m.cd = m.def.boss ? .9 : 1; m.lunge = .15;
     if (tgt === P) {
-      hurtPlayer(m.dmg, { kind: 'melee', ang: m.aang, bleed: m.t === 'brute' || m.def.boss ? .35 : .08, infect: m.def.boss ? .2 : .07, cause: m.def.n });
+      hurtPlayer(m.dmg, { kind: 'melee', ang: m.aang, bleed: m.t === 'brute' || m.def.boss ? .35 : .08, infect: m.def.boss ? .2 : (m.t === 'rats' ? .3 : .07), cause: m.def.n });
+      if (m.def.ignite) { P.burn = Math.max(P.burn, 3); } if (m.t === 'crawler') { P.slowT = 1.8; }
       if (m.def.kbres > .5 || m.t === 'brute') { P.vx += Math.cos(m.aang) * 260; P.vy += Math.sin(m.aang) * 260; }
     } else hurtFriend(tgt, m.dmg);
     SFX.play('hit', .4);
   }
 }
 function bossLogic(m, tgt, d, dt) {
+  if (m.def.hive) {
+    m.sumT = (m.sumT == null ? 3 : m.sumT) - dt; m.spitT = (m.spitT == null ? 2 : m.spitT) - dt;
+    if (m.sumT <= 0) { m.sumT = 6; m.minions = (m.minions || []).filter(z => !z.dead); if (m.minions.length < 10) for (let k = 0; k < 4; k++) { const a = rnd(0, TAU), z = spawnMob(Math.random() < .5 ? 'crawler' : 'rats', m.x + Math.cos(a) * 36, m.y + Math.sin(a) * 36, { state: 'chase', ambient: true }); m.minions.push(z); } SFX.play('screech', .8); addText(m.x, m.y - 40, 'LA RUCHE GRONDE', '#ff8ad0', true); shake(4); }
+    if (m.spitT <= 0 && d < 420 && los(m.x, m.y, tgt.x, tgt.y)) { m.spitT = 3.2; const a0 = ang(m.x, m.y, tgt.x, tgt.y); for (let k = -1; k <= 1; k++) { const a = a0 + k * .22; spawnBullet({ x: m.x, y: m.y, vx: Math.cos(a) * 280, vy: Math.sin(a) * 280, dmg: m.dmg * .5, left: 460, team: 'h', kind: 'acid', col: '#9acd32', r: 6, cause: m.def.n }); } }
+    if (dist(m.x, m.y, m.homeX, m.homeY) > 380 && d > 200) { steer(m, m.homeX, m.homeY, m.spd, dt); }
+  }
   m.special -= dt;
   if (m.charge > 0) { m.charge -= dt; return; }
   if (m.special <= 0) {
@@ -240,7 +289,8 @@ function updateAnimal(m, dt) {
   if (sees) {
     if (!m.aggro && def.ai === 'predator') { m.aggro = true; }
     const reach = m.r + P.r + 6;
-    if (dP > reach) steer(m, P.x, P.y, m.spd, dt); else { m.aang = ang(m.x, m.y, P.x, P.y); m.cd -= dt; if (m.cd <= 0) { m.cd = 1; m.lunge = .15; hurtPlayer(m.dmg, { kind: 'melee', ang: m.aang, bleed: .15, cause: def.n }); } }
+    if (def.web) { m.webCd = (m.webCd == null ? 1 : m.webCd) - dt; if (m.webCd <= 0 && dP > 130 && dP < 380 && los(m.x, m.y, P.x, P.y)) { m.webCd = 3.6; const a = ang(m.x, m.y, P.x, P.y); spawnBullet({ x: m.x, y: m.y, vx: Math.cos(a) * 360, vy: Math.sin(a) * 360, dmg: 3, left: 440, team: 'h', kind: 'web', col: '#ddd', r: 6, cause: def.n }); SFX.play('swing', .5); } }
+    if (dP > reach) steer(m, P.x, P.y, m.spd, dt); else { m.aang = ang(m.x, m.y, P.x, P.y); m.cd -= dt; if (m.cd <= 0) { m.cd = 1; m.lunge = .15; hurtPlayer(m.dmg, { kind: 'melee', ang: m.aang, bleed: .15, infect: def.sting ? .35 : (def.web ? .2 : 0), cause: def.n }); } }
     if (dP > 750) { m.aggro = false; }
   } else wanderMob(m, dt, .3);
 }

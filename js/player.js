@@ -15,6 +15,7 @@ function updatePlayer(dt) {
     let sp = 138 * moveSpeedMul() * coldM * (P.sprint ? 1.6 : 1) * (aiming ? .82 : 1);
     if (G.tiles[IDX(Math.floor(P.x / TS), Math.floor(P.y / TS))] === T.ROAD) sp *= 1.06;
     if (P.infect) sp *= .92;
+    if (P.slowT > 0) { P.slowT -= dt; sp *= .55; }
     moveEnt(P, (ix * sp + P.vx) * dt, (iy * sp + P.vy) * dt, true);
     P.vx *= Math.max(0, 1 - dt * 8); P.vy *= Math.max(0, 1 - dt * 8);
     if (P.sprint) { P.stam -= 22 * dt; P.staRegenT = .7; if (P.stam <= 0) { P.stam = 0; P.exhausted = true; } }
