@@ -16,7 +16,7 @@ function statBar(c, x, y, w, h, v, max, c1, c2, label, icon, time, lag) {
 }
 
 function drawHUD(c, time) {
-  if (P.dead && !G.over) return;
+  if (G.noHud || (P.dead && !G.over)) return;
   const S = SET.hud, W = VW / S, H = VH / S;
   drawScreenFx(c, time);
   c.save(); c.scale(S, S);

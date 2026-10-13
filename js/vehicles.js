@@ -136,7 +136,7 @@ function updateVehicles(dt) {
       const f = 160 * dt; v.v = Math.abs(v.v) <= f ? 0 : v.v - Math.sign(v.v) * f;
       const nx = v.x + Math.cos(v.ang) * v.v * dt, ny = v.y + Math.sin(v.ang) * v.v * dt; if (!collide(nx, ny, v.r * .85, false)) { v.x = nx; v.y = ny; } else v.v = 0;
     }
-    if (v.hp < v.maxhp * .35) { v.smokeT -= dt; if (v.smokeT <= 0) { v.smokeT = v.hp < v.maxhp * .15 ? .05 : .13; addPart(v.x + Math.cos(v.ang) * v.def.len * .3, v.y + Math.sin(v.ang) * v.def.len * .3, rnd(-12, 12), rnd(-45, -20), rnd(.6, 1.1), rnd(3, 6), v.hp < v.maxhp * .15 ? '#e07a20' : '#555', 'fire'); } }
+    if (v.hp < v.maxhp * .35) { v.smokeT -= dt; if (v.smokeT <= 0) { v.smokeT = v.hp < v.maxhp * .15 ? .05 : .13; addPart(v.x + Math.cos(v.ang) * v.def.len * .3, v.y + Math.sin(v.ang) * v.def.len * .3, rnd(-12, 12), rnd(-45, -20), rnd(.6, 1.1), rnd(3, 6), v.hp < v.maxhp * .15 ? '#e07a20' : '#555', v.hp < v.maxhp * .15 ? 'fire' : 'smoke'); } }
     if (v.hp < v.maxhp * .1 && v !== P.veh) { v.hp -= dt * 2; if (v.hp <= 0) destroyVehicle(v); }
   }
 }
@@ -144,24 +144,12 @@ function updateVehicles(dt) {
 // ----- Dessin -----
 function drawVehicle(c, v, time) {
   const d = v.def, L = d.len, W = d.wid;
+  dropShadow(c, v.x, v.y + 4, L * .5, W * .55, 8);
   c.save(); c.translate(v.x, v.y); c.rotate(v.ang);
-  c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(3, 4, L * .55, W * .55, 0, 0, TAU); c.fill();
+  const spr = vehSprite(v); blit(c, spr, 0, 0);
   const dmg = v.hp / v.maxhp;
-  if (v.t === 'moto') {
-    c.fillStyle = '#111'; rrect(c, -L / 2, -3, L * .3, 6, 3); c.fill(); rrect(c, L / 2 - L * .3, -3, L * .3, 6, 3); c.fill();
-    c.fillStyle = v.col; rrect(c, -L * .28, -W * .3, L * .56, W * .6, 4); c.fill();
-    c.fillStyle = '#222'; c.fillRect(L * .12, -W * .55, 4, W * 1.1);
-    c.fillStyle = '#ffe9a0'; c.beginPath(); c.arc(L / 2 - 1, 0, 3, 0, TAU); c.fill();
-  } else {
-    c.fillStyle = '#111'; for (const [wx, wy] of [[-L * .3, -W / 2 - 1], [L * .3, -W / 2 - 1], [-L * .3, W / 2 - 3], [L * .3, W / 2 - 3]]) c.fillRect(wx - 6, wy, 12, 4);
-    c.fillStyle = v.col; rrect(c, -L / 2, -W / 2, L, W, 6); c.fill();
-    c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(-L / 2, -W / 2, L, 3); c.fillRect(-L / 2, W / 2 - 3, L, 3);
-    if (v.t === 'truck') { c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(-L / 2 + 3, -W / 2 + 4, L * .5, W - 8); c.fillStyle = v.col; c.fillRect(-L / 2 + 5, -W / 2 + 6, L * .5 - 4, W - 12); c.fillStyle = '#222'; c.fillRect(L * .02, -W / 2 + 3, L * .46, W - 6); c.fillStyle = 'rgba(150,200,230,.5)'; c.fillRect(L * .26, -W / 2 + 5, 9, W - 10); }
-    else { c.fillStyle = 'rgba(30,40,50,.85)'; rrect(c, -L * .08, -W / 2 + 3, L * .36, W - 6, 4); c.fill(); c.fillStyle = 'rgba(150,200,230,.5)'; c.fillRect(L * .2, -W / 2 + 4, 8, W - 8); c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(-L * .4, -W / 2 + 4, L * .25, W - 8); }
-    c.fillStyle = '#ffe9a0'; c.fillRect(L / 2 - 4, -W / 2 + 3, 4, 5); c.fillRect(L / 2 - 4, W / 2 - 8, 4, 5);
-    c.fillStyle = '#b02020'; c.fillRect(-L / 2, -W / 2 + 3, 3, 4); c.fillRect(-L / 2, W / 2 - 7, 3, 4);
-    if (dmg < .6) { c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(L * .1, -W / 2); c.lineTo(L * .2, 0); c.lineTo(L * .05, W / 3); c.stroke(); }
-  }
+  if (dmg < .6 && v.t !== 'moto') { c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(L * .1, -W / 2); c.lineTo(L * .2, 0); c.lineTo(L * .05, W / 3); c.stroke(); }
+  if (v.driver && v.fuel > 0) { c.save(); c.globalCompositeOperation = 'lighter'; blit(c, glowSprite('255,244,200'), L / 2 + 4, 0, 0, 1.1); c.restore(); }
   // améliorations visibles
   if (v.up.armor > 0 && v.t !== 'moto') { c.strokeStyle = 'rgba(40,40,46,.9)'; c.lineWidth = 2 + v.up.armor; rrect(c, -L / 2 + 1, -W / 2 + 1, L - 2, W - 2, 6); c.stroke(); }
   if (v.up.ram > 0) { c.fillStyle = '#1a1a1e'; c.fillRect(L / 2 - 2, -W / 2 - 1, 3 + v.up.ram, W + 2); c.fillStyle = '#6a6a72'; for (let i = 0; i < v.up.ram + 1; i++) c.fillRect(L / 2 + 1, -W / 2 + 2 + i * (W - 6) / (v.up.ram), 2, 3); }
