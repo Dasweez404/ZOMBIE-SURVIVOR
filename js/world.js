@@ -37,6 +37,12 @@ function moveEnt(e, dx, dy, fr) {
   if (dy) { const ny = clamp(e.y + dy, 20, G.H * TS - 20); if (!collide(e.x, ny, r, fr)) e.y = ny; else hit |= 2; }
   return hit;
 }
+// Dégage une entité coincée dans un obstacle solide (structure posée dessus, arbre qui repousse…)
+function unstick(e, fr) {
+  const r = e.r * .8; if (!collide(e.x, e.y, r, fr)) return false;
+  for (let d = 8; d <= 120; d += 8) for (let k = 0; k < 16; k++) { const a = k / 16 * TAU, x = e.x + Math.cos(a) * d, y = e.y + Math.sin(a) * d; if (!collide(x, y, r, fr)) { e.x = x; e.y = y; return true; } }
+  return false;
+}
 function los(x0, y0, x1, y1) {
   const d = Math.hypot(x1 - x0, y1 - y0); const n = Math.ceil(d / 14);
   for (let i = 1; i < n; i++) {

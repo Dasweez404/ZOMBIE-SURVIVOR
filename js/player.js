@@ -20,6 +20,7 @@ function updatePlayer(dt) {
     if (P.sprint) { P.stam -= 22 * dt; P.staRegenT = .7; if (P.stam <= 0) { P.stam = 0; P.exhausted = true; } }
     else { P.staRegenT = (P.staRegenT || 0) - dt; if (P.staRegenT <= 0) P.stam = Math.min(maxStam(), P.stam + (P.hun > 15 ? 20 : 8) * (P.temp < 30 ? .5 : P.temp > 80 ? .6 : 1) * dt); if (P.exhausted && P.stam > 25) P.exhausted = false; }
   }
+  if (!P.veh && G.tick % 6 === 0) unstick(P, true);
   P.ang = Math.atan2(G.mouse.y - P.y, G.mouse.x - P.x);
   P.walk = (P.walk || 0) + (P.moving ? (P.sprint ? 14 : 9) * dt : 0);
   if (P.sprint && Math.random() < dt * 12) addPart(P.x - ix * 10, P.y - iy * 10 + 6, rnd(-15, 15), rnd(-15, 0), .45, rnd(2, 4), 'rgba(170,150,120,.7)', 'dot');

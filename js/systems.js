@@ -144,7 +144,7 @@ function claimPOI(p) {
   let placed = false;
   for (let r = 1; r < 4 && !placed; r++) for (let dy = -r; dy <= r && !placed; dy++) for (let dx = -r; dx <= r && !placed; dx++) {
     const tx = p.flag.tx + dx, ty = p.flag.ty + dy;
-    if (freeTile(tx, ty) && G.tiles[IDX(tx, ty)] !== T.WATER && !(dx === 0 && dy === 0)) { p.chest = placeStruct('chest', tx, ty, true); placed = true; }
+    if (freeTile(tx, ty) && G.tiles[IDX(tx, ty)] !== T.WATER && !(dx === 0 && dy === 0) && dist(P.x, P.y, tx * TS + 16, ty * TS + 16) > 44 && !G.friends.some(f => dist(f.x, f.y, tx * TS + 16, ty * TS + 16) < 30)) { p.chest = placeStruct('chest', tx, ty, true); placed = true; }
   }
   msg('Base établie : ' + p.name + ' ! Construisez des défenses (B) et améliorez-la (E sur le drapeau).', '#8affb0');
   SFX.play('levelup'); addXP(60); G.stats.bases++; questEvent('claim', p);
