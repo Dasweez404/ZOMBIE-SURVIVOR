@@ -13,7 +13,7 @@
 <div id="buildbar" class="hidden"></div>
 <div id="panel" class="hidden"></div>
 <div id="dialog" class="hidden"></div>
-<div id="pause" class="hidden"><div class="box"><h2>⏸ Pause</h2><button id="btnResume" class="pri">▶ Reprendre</button><button id="btnPOpt">⚙️ Options</button><button id="btnPHelp">❓ Commandes (F1)</button><button id="btnPTut">🎓 Revoir le tutoriel</button><button id="btnSave">💾 Sauvegarder</button><button id="btnQuit">🚪 Sauvegarder et quitter</button></div></div>
+<div id="pause" class="hidden"><div class="box"><h2>⏸ Pause</h2><button id="btnResume" class="pri">▶ Reprendre</button><button id="btnPOpt">⚙️ Options</button><button id="btnPHelp">❓ Commandes (F1)</button><button id="btnPTut">🎓 Revoir le tutoriel</button><div id="seedinfo"></div><button id="btnSave">💾 Sauvegarder</button><button id="btnQuit">🚪 Sauvegarder et quitter</button></div></div>
 <div id="settings" class="hidden"></div>
 <div id="help2" class="hidden"><div class="box wide"><h2>❓ Commandes</h2><div class="helptbl"></div><button data-x="1" class="pri">Fermer (F1)</button></div></div>
 <div id="gameover" class="hidden"></div>
@@ -23,7 +23,16 @@
     <h1>ZOMBIE<br><span>SURVIVOR</span></h1>
     <p class="sub">Survivez le plus longtemps possible. Fouillez, fabriquez, conduisez, apprivoisez, alliez-vous, bâtissez votre forteresse… et tenez bon la nuit.</p>
     <div class="diff"><span>Difficulté</span><button data-diff="0">Facile</button><button data-diff="1" class="on">Normal</button><button data-diff="2">Difficile</button></div>
-    <div class="seed"><input id="seedIn" placeholder="Graine du monde (optionnel)" maxlength="24"></div>
+    <div class="world">
+      <div class="wprev"><canvas id="wprev" width="168" height="168"></canvas><div id="wsum"></div></div>
+      <div class="wopts">
+        <div class="seed"><input id="seedIn" placeholder="Graine du monde" maxlength="24" spellcheck="false"><button id="btnDice" title="Graine aléatoire">🎲</button><button id="btnDaily" title="Graine du jour (même monde pour tous)">📅</button></div>
+        <div class="chips" data-g="size"><span>Taille</span><button data-v="S">Petit</button><button data-v="M" class="on">Moyen</button><button data-v="L">Grand</button></div>
+        <div class="chips" data-g="style"><span>Terrain</span><button data-v="balanced" class="on">Équilibré</button><button data-v="forest">Forêts</button><button data-v="desert">Aride</button><button data-v="archipel">Archipel</button></div>
+        <div class="chips" data-g="dens"><span>Lieux</span><button data-v="0">Rares</button><button data-v="1" class="on">Normal</button><button data-v="2">Denses</button></div>
+        <p class="wnote">La même graine et les mêmes options génèrent toujours exactement le même monde : partagez-la !</p>
+      </div>
+    </div>
     <div class="btns"><button id="btnNew" class="big">▶ Nouvelle partie</button><button id="btnCont" class="big hidden">⏩ Continuer</button></div>
     <div class="btns small"><button id="btnTut">🎓 Tutoriel guidé</button><button id="btnOpt">⚙️ Options</button><button id="btnHelp">❓ Commandes</button></div>
     <div id="best"></div>

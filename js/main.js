@@ -63,6 +63,7 @@ function onKeyUp(e) {
 }
 function togglePause() {
   if (G.over) return;
+  if (!G.pausedMenu) { const wn = WORLD_SIZES[G.wo.size].n + ' · ' + WORLD_STYLES[G.wo.style].n + ' · lieux ' + WORLD_DENS[G.wo.dens].n.toLowerCase(); $('seedinfo').innerHTML = 'Monde : <b>' + G.seed + '</b> <button class="sm" id="btnCopy">📋 Copier</button><br><small>' + wn + '</small>'; $('btnCopy').onclick = () => { try { navigator.clipboard.writeText(String(G.seed)); msg('Graine copiée : ' + G.seed, '#9fe8a8'); SFX.play('ui'); } catch (e) { } }; }
   G.pausedMenu = !G.pausedMenu; G.paused = G.pausedMenu || panelOpen(); $('pause').classList.toggle('hidden', !G.pausedMenu);
   if (!G.pausedMenu) closeSettings();
 }
@@ -176,11 +177,22 @@ function stopTitleBg() { cancelAnimationFrame(titleRAF); }
 function setupTitle() {
   let diff = 1;
   document.querySelectorAll('[data-diff]').forEach(b => b.onclick = () => { diff = +b.dataset.diff; document.querySelectorAll('[data-diff]').forEach(x => x.classList.toggle('on', x === b)); SFX.init(); SFX.play('ui'); });
-  const seedOf = () => { const s = $('seedIn').value.trim(); let seed = 0; if (s) seed = /^\d+$/.test(s) ? +s : [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7); return seed || undefined; };
-  $('btnNew').onclick = () => startGame({ diff, seed: seedOf() });
-  $('btnTut').onclick = () => { SET.tutorial = true; saveSettings(); startGame({ diff: 0, seed: seedOf(), tutorial: true }); };
+  const wo = { size: 'M', style: 'balanced', dens: 1 };
+  const seedOf = () => { const s = $('seedIn').value.trim(); let seed = 0; if (s) seed = /^\d+$/.test(s) ? (+s >>> 0) : [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7); return seed || 1; };
+  let pt = 0;
+  const preview = () => { clearTimeout(pt); pt = setTimeout(() => { try { const r = previewWorld(seedOf(), wo, $('wprev')); $('wsum').textContent = r.pois + ' lieux · ' + r.zones + ' zones radioactives · ' + r.vehicles + ' véhicules'; } catch (e) { console.warn(e); } }, 90); };
+  const newSeed = () => { $('seedIn').value = String(Math.floor(Math.random() * 999999999) + 1); preview(); };
+  try { const rt = JSON.parse(sessionStorage.getItem('zs_retry') || 'null'); if (rt) { sessionStorage.removeItem('zs_retry'); $('seedIn').value = rt.seed; Object.assign(wo, rt.wo); diff = rt.diff; } } catch (e) { }
+  if (!$('seedIn').value) $('seedIn').value = String(Math.floor(Math.random() * 999999999) + 1);
+  document.querySelectorAll('.chips').forEach(g => { const k = g.dataset.g; g.querySelectorAll('button').forEach(b => { b.classList.toggle('on', String(wo[k]) === b.dataset.v); b.onclick = () => { wo[k] = k === 'dens' ? +b.dataset.v : b.dataset.v; g.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); SFX.init(); SFX.play('ui'); preview(); }; }); });
+  document.querySelectorAll('[data-diff]').forEach(x => x.classList.toggle('on', +x.dataset.diff === diff));
+  $('seedIn').oninput = preview; $('btnDice').onclick = () => { SFX.init(); SFX.play('click'); newSeed(); };
+  $('btnDaily').onclick = () => { const d = new Date(); $('seedIn').value = String(d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()); SFX.init(); SFX.play('click'); preview(); };
+  preview();
+  $('btnNew').onclick = () => startGame({ diff, seed: seedOf(), wo: Object.assign({}, wo) });
+  $('btnTut').onclick = () => { SET.tutorial = true; saveSettings(); startGame({ diff: 0, seed: seedOf(), wo: Object.assign({}, wo), tutorial: true }); };
   const cont = $('btnCont');
-  if (hasSave()) { cont.classList.remove('hidden'); cont.onclick = () => { const d = loadSaveData(); if (!d) return; startGame({ seed: d.seed, diff: d.diff, load: d }); }; }
+  if (hasSave()) { cont.classList.remove('hidden'); cont.onclick = () => { const d = loadSaveData(); if (!d) return; startGame({ seed: d.seed, diff: d.diff, wo: d.wo, load: d }); }; }
   $('btnHelp').onclick = () => $('help').classList.toggle('hidden');
   $('btnOpt').onclick = openSettings;
   let best = 0; try { best = +localStorage.getItem('zs_best') || 0; } catch (e) { }
@@ -199,7 +211,8 @@ window.addEventListener('load', () => {
   $('panel').addEventListener('click', onPanelClick); $('dialog').addEventListener('click', onPanelClick);
   $('tut').addEventListener('click', e => { const b = e.target.closest('[data-tut]'); if (b) tutAction(b.dataset.tut); });
   $('buildbar').addEventListener('click', e => { const b = e.target.closest('[data-b]'); if (b) { G.buildType = b.dataset.b; refreshBuildBar(); SFX.play('click'); } });
-  $('btnResume').onclick = togglePause; $('btnSave').onclick = () => { saveGame(false); };
+  $('btnResume').onclick = togglePause;
+  $('btnPause') && 0; $('btnSave').onclick = () => { saveGame(false); };
   $('btnPOpt').onclick = openSettings; $('btnPHelp').onclick = () => { toggleHelp(); };
   $('btnPTut').onclick = () => { togglePause(); tutStart(); };
   $('btnQuit').onclick = () => { saveGame(true); location.reload(); };

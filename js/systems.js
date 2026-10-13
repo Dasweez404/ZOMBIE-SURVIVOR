@@ -415,7 +415,7 @@ function saveGame(silent) {
   if (!G || P.dead || G.over) return;
   try {
     const data = {
-      v: 1, seed: G.seed, diff: G.diff, clock: G.clock, playTime: G.playTime, stats: G.stats, radioOn: G.radioOn, hordeDay: G.hordeDay,
+      v: 1, seed: G.seed, diff: G.diff, wo: G.wo, clock: G.clock, playTime: G.playTime, stats: G.stats, radioOn: G.radioOn, hordeDay: G.hordeDay,
       p: { x: P.x, y: P.y, hp: P.hp, hun: P.hun, thi: P.thi, stam: P.stam, inv: P.inv, gear: P.gear, slots: P.slots, sel: P.sel, armor: P.armor, pack: P.pack, known: P.known, skills: P.skills, sp: P.sp, lvl: P.lvl, xp: P.xp, bleed: P.bleed, infect: P.infect, sick: P.sick, rep: P.rep, temp: P.temp, rad: P.rad, healT: G.docDay },
       structs: [...G.structs.values()].filter(s => !s.free).map(s => ({ type: s.type, tx: s.tx, ty: s.ty, hp: s.hp, ammo: s.ammo, stash: s.stash, plant: s.plant, t0: s.t0, water: s.water })),
       pois: G.pois.map(p => ({ id: p.id, owned: p.owned, lvl: p.lvl, hpFlag: p.hpFlag, cleared: p.cleared, discovered: p.discovered, chest: p.chest ? [p.chest.tx, p.chest.ty] : null })),
@@ -468,7 +468,7 @@ function initGame(opts) {
   opts = opts || {};
   const seed = opts.seed || Math.floor(Math.random() * 1e9);
   G = {
-    W: 150, H: 150, seed, diff: opts.diff === undefined ? 1 : opts.diff, clock: DAY_LEN * 0.12, playTime: 0, day: 1, dark: 0, tick: 0,
+    W: (WORLD_SIZES[(opts.wo || {}).size] || WORLD_SIZES.M).v, H: (WORLD_SIZES[(opts.wo || {}).size] || WORLD_SIZES.M).v, wo: Object.assign({ size: 'M', style: 'balanced', dens: 1 }, opts.wo || {}), style: (opts.wo || {}).style || 'balanced', dens: (opts.wo || {}).dens === undefined ? 1 : opts.wo.dens, seed, diff: opts.diff === undefined ? 1 : opts.diff, clock: DAY_LEN * 0.12, playTime: 0, day: 1, dark: 0, tick: 0,
     mobs: [], friends: [], npcs: [], bullets: [], pickups: [], parts: [], texts: [], decals: [], fires: [], blasts: [], thrown: [], mines: [], msgs: [], depleted: [],
     toasts: [], dmgInd: [], banner: null, hitm: null, fadeIn: 1.4, kick: { x: 0, y: 0 }, hitstop: 0, tscale: 1, slowT: 0, heartT: 0, tipT: 3, droneT: 0, edgeT: 0, keys: {}, mouse: { x: 0, y: 0, sx: 0, sy: 0 }, lmb: false, rmb: false, lmbEdge: false, shake: 0, cam: { x: 0, y: 0 }, paused: false,
     quests: { active: {}, done: {}, tracked: null, contractN: 0 }, stats: { kills: 0, zkills: 0, built: 0, looted: 0, gathered: 0, quests: 0, bases: 0, assaults: 0 },

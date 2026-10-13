@@ -103,22 +103,41 @@ function addObj(tx, ty, kind, props) {
 }
 function removeObj(o) { const i = IDX(o.tx, o.ty); G.objs.delete(i); if (G.solid[i] === SO.OBJ) G.solid[i] = 0; }
 
-function genWorld(seed) {
-  const W = G.W, H = G.H, N = W * H;
-  G.tiles = new Uint8Array(N); G.solid = new Uint8Array(N); G.reserve = new Uint8Array(N);
-  G.objs = new Map(); G.structs = new Map(); G.pois = []; G.buildings = []; G.npcsDef = [];
-  const rng = G.rng = new RNG(seed);
-  G.moist = new Float32Array(N);
+// ----- options de monde -----
+const WORLD_SIZES = { S: { n: 'Petit', v: 110 }, M: { n: 'Moyen', v: 150 }, L: { n: 'Grand', v: 200 } };
+const WORLD_STYLES = {
+  balanced: { n: 'Équilibré', scale: 30, off: .07, moist: 0, trees: 1, rocks: 1, wrecks: 1, lakes: 0 },
+  forest:   { n: 'Forêts denses', scale: 30, off: .07, moist: .14, trees: 1.35, rocks: .8, wrecks: .8, lakes: 0 },
+  desert:   { n: 'Terres arides', scale: 30, off: .09, moist: -.2, trees: .35, rocks: 1.9, wrecks: 1.6, lakes: 0 },
+  archipel: { n: 'Archipel', scale: 21, off: -.02, moist: .02, trees: 1, rocks: 1, wrecks: .8, lakes: 1 },
+};
+const WORLD_DENS = { 0: { n: 'Rare', k: .6 }, 1: { n: 'Normal', k: 1 }, 2: { n: 'Dense', k: 1.4 } };
+function wScale() { return G.W / 150; }
+function genTerrain(seed) {
+  const W = G.W, H = G.H, N = W * H, st = WORLD_STYLES[G.style] || WORLD_STYLES.balanced, f = W / 150;
+  G.tiles = new Uint8Array(N); G.solid = new Uint8Array(N); G.reserve = new Uint8Array(N); G.moist = new Float32Array(N);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    let e = fbm(x / 30, y / 30, seed, 4) + .07;
+    let e = fbm(x / (st.scale * (f > 1 ? 1 + (f - 1) * .5 : 1)), y / (st.scale * (f > 1 ? 1 + (f - 1) * .5 : 1)), seed, 4) + st.off;
     const dx = (x - W / 2) / (W / 2), dy = (y - H / 2) / (H / 2), d = Math.max(Math.abs(dx), Math.abs(dy));
     e -= Math.pow(d, 6) * .6;
-    const dc = Math.hypot(x - W / 2, y - H / 2); if (dc < 20) e += (1 - dc / 20) * .3;
-    const m = fbm(x / 20 + 100, y / 20 + 100, seed + 7, 4); G.moist[y * W + x] = m;
+    const dc = Math.hypot(x - W / 2, y - H / 2), cr = 20 * f; if (dc < cr) e += (1 - dc / cr) * (st.lakes ? .16 : .3);
+    const m = fbm(x / 20 + 100, y / 20 + 100, seed + 7, 4) + st.moist; G.moist[y * W + x] = m;
     let t;
-    if (e < .335) t = T.WATER; else if (e < .365) t = T.SAND; else if (m < .4 && e > .5) t = T.DIRT; else if (m > .56) t = T.FOREST; else t = T.GRASS;
+    if (e < .335) t = T.WATER; else if (e < .365) t = T.SAND; else if (m < .4 && e > .5 || (m < .4 && st.moist < -.1 && e > .4)) t = T.DIRT; else if (m > .56) t = T.FOREST; else t = T.GRASS;
     G.tiles[y * W + x] = t; if (t === T.WATER) G.solid[y * W + x] = SO.WATER;
   }
+}
+function computeShore() { // distance à la côte pour les tuiles d'eau (0 = bord) — sert au dégradé de profondeur
+  const W = G.W, H = G.H, N = W * H; const d = new Uint8Array(N).fill(255); const q = [];
+  for (let i = 0; i < N; i++) if (G.tiles[i] !== T.WATER) { d[i] = 0; q.push(i); }
+  for (let h = 0; h < q.length; h++) { const i = q[h], x = i % W, y = (i / W) | 0, nd = d[i] + 1; if (nd > 9) continue; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue; const j = ny * W + nx; if (d[j] > nd) { d[j] = nd; q.push(j); } } }
+  G.shore = d;
+}
+function genWorld(seed) {
+  const W = G.W, H = G.H;
+  G.objs = new Map(); G.structs = new Map(); G.pois = []; G.buildings = []; G.npcsDef = [];
+  const rng = G.rng = new RNG(seed);
+  genTerrain(seed);
   const cx = W >> 1, cy = H >> 1;
   G.spawn = { x: cx * TS + 16, y: cy * TS + 16 };
   placePOIs(rng);
@@ -128,6 +147,7 @@ function genWorld(seed) {
   buildStartCamp(rng);
   genRadZones(rng);
   genVehicles(rng);
+  computeShore();
 }
 
 function rectFree(x, y, w, h, margin) {
@@ -142,16 +162,19 @@ function rectFree(x, y, w, h, margin) {
 
 function placePOIs(rng) {
   const W = G.W, H = G.H, cx = W / 2, cy = H / 2;
-  const order = [['village', 1]];
-  for (const k of ['hospital', 'police', 'market', 'warehouse', 'bunker', 'legion', 'camp', 'radio', 'farm', 'gas', 'cabin', 'house'])
-    for (let i = 0; i < POICOUNT[k]; i++) order.push([k, 1]);
+  const f = wScale(), dk = (WORLD_DENS[G.dens] || WORLD_DENS[1]).k, order = [['village', 1]];
+  const UNIQ = { hospital: 1, police: 1, bunker: 1, legion: 1, radio: 1, market: 1, warehouse: 1, camp: 2, farm: 1, gas: 1 };
+  for (const k of ['hospital', 'police', 'market', 'warehouse', 'bunker', 'legion', 'camp', 'radio', 'farm', 'gas', 'cabin', 'house']) {
+    const n = Math.max(UNIQ[k] || 4, Math.round(POICOUNT[k] * f * f * dk * (f < 1 ? 1.25 : 1)));
+    for (let i = 0; i < n; i++) order.push([k, 1]);
+  }
   const rng_d = { village: [26, 34], hospital: [24, 55], police: [18, 50], market: [20, 55], warehouse: [26, 60], bunker: [46, 64], legion: [44, 64], camp: [24, 58], radio: [34, 62], farm: [16, 60], gas: [12, 60], cabin: [14, 62], house: [8, 64] };
   let id = 0;
   for (const [type] of order) {
-    const def = POITYPES[type];
+    const def = POITYPES[type]; let placed = false;
     for (let tries = 0; tries < 900; tries++) {
-      const [w, h] = def.size; let [d0, d1] = rng_d[type];
-      if (tries > 450) { d0 = Math.max(6, d0 * .6); d1 = Math.min(66, d1 * 1.2); }
+      const [w, h] = def.size; let [d0, d1] = rng_d[type]; d0 *= f; d1 *= f;
+      if (tries > 450) { d0 = Math.max(6, d0 * .6); d1 = Math.min(W / 2 - 9, d1 * 1.2); }
       const a = rng.range(0, TAU), d = rng.range(d0, d1);
       const x = Math.round(cx + Math.cos(a) * d - w / 2), y = Math.round(cy + Math.sin(a) * d - h / 2);
       if (!rectFree(x, y, w, h, tries > 600 ? 2 : (type === 'house' || type === 'cabin' ? 1 : 3))) continue;
@@ -159,8 +182,16 @@ function placePOIs(rng) {
       const p = { id: id++, type, name: def.n, x, y, w, h, cx: (x + w / 2) * TS, cy: (y + h / 2) * TS, spawned: false, cleared: false, owned: false, discovered: false, lvl: 1, mobs: [], crates: [], hpFlag: 0, stash: null, chest: null, def };
       for (let ty = y - 2; ty < y + h + 2; ty++) for (let tx = x - 2; tx < x + w + 2; tx++) G.reserve[IDX(tx, ty)] = 1;
       G.pois.push(p);
-      buildPOI(p, rng);
+      buildPOI(p, rng); placed = true;
       break;
+    }
+    if (!placed && type === 'village') { // secours : on aplanit un terrain près du centre
+      const [w, h] = def.size; const a = rng.range(0, TAU), d = rng.range(10, 20) * f;
+      const x = Math.round(cx + Math.cos(a) * d - w / 2), y = Math.round(cy + Math.sin(a) * d - h / 2);
+      for (let ty = y - 4; ty < y + h + 4; ty++) for (let tx = x - 4; tx < x + w + 4; tx++) if (inb(tx, ty)) { const i = IDX(tx, ty); G.tiles[i] = T.GRASS; G.solid[i] = 0; }
+      const p = { id: id++, type, name: def.n, x, y, w, h, cx: (x + w / 2) * TS, cy: (y + h / 2) * TS, spawned: false, cleared: false, owned: false, discovered: false, lvl: 1, mobs: [], crates: [], hpFlag: 0, stash: null, chest: null, def };
+      for (let ty = y - 2; ty < y + h + 2; ty++) for (let tx = x - 2; tx < x + w + 2; tx++) G.reserve[IDX(tx, ty)] = 1;
+      G.pois.push(p); buildPOI(p, rng);
     }
   }
 }
@@ -367,35 +398,35 @@ function carveRoads(rng) {
 }
 
 function scatterObjects(rng) {
-  const W = G.W, H = G.H, sx = G.spawn.x / TS, sy = G.spawn.y / TS;
+  const W = G.W, H = G.H, sx = G.spawn.x / TS, sy = G.spawn.y / TS, st = WORLD_STYLES[G.style] || WORLD_STYLES.balanced, kT = st.trees, kR = st.rocks, kW = st.wrecks;
   for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
     const i = y * W + x, t = G.tiles[i];
     if (G.solid[i] || G.objs.has(i) || G.reserve[i]) continue;
     if (Math.hypot(x - sx, y - sy) < 4) continue;
     const r = rng.next(), cl = vnoise(x / 3.5, y / 3.5, G.seed + 9);
-    if (t === T.ROAD) { if (r < .012) addObj(x, y, 'wreck', { ang: rng.range(0, TAU) }); else if (r < .02) addObj(x, y, 'scrappile'); continue; }
+    if (t === T.ROAD) { if (r < .012 * kW) addObj(x, y, 'wreck', { ang: rng.range(0, TAU) }); else if (r < .02) addObj(x, y, 'scrappile'); continue; }
     if (t === T.FOREST) {
-      const dens = .22 + cl * .35;
+      const dens = Math.min(.7, (.22 + cl * .35) * kT);
       if (r < dens) addObj(x, y, 'tree');
       else if (r < dens + .02) addObj(x, y, 'bush');
       else if (r < dens + .035) addObj(x, y, 'herb');
-      else if (r < dens + .043) addObj(x, y, 'rock');
+      else if (r < dens + .035 + .008 * kR) addObj(x, y, 'rock');
     } else if (t === T.GRASS) {
-      if (r < .03 + (cl > .62 ? .12 : 0)) addObj(x, y, 'tree');
+      if (r < (.03 + (cl > .62 ? .12 : 0)) * kT) addObj(x, y, 'tree');
       else if (r < .047) addObj(x, y, 'bush');
       else if (r < .058) addObj(x, y, 'herb');
-      else if (r < .07) addObj(x, y, 'rock');
-      else if (r < .0725) addObj(x, y, 'scrappile');
+      else if (r < .058 + .012 * kR) addObj(x, y, 'rock');
+      else if (r < .0725 + .012 * kR) addObj(x, y, 'scrappile');
     } else if (t === T.DIRT) {
-      if (r < .05) addObj(x, y, 'rock'); else if (r < .065) addObj(x, y, 'deadtree'); else if (r < .069) addObj(x, y, 'wreck', { ang: rng.range(0, TAU) });
+      if (r < .05 * kR) addObj(x, y, 'rock'); else if (r < .05 * kR + .015) addObj(x, y, 'deadtree'); else if (r < .05 * kR + .015 + .004 * kW) addObj(x, y, 'wreck', { ang: rng.range(0, TAU) });
     } else if (t === T.SAND) {
-      if (r < .012) addObj(x, y, 'deadtree'); else if (r < .02) addObj(x, y, 'rock');
+      if (r < .012) addObj(x, y, 'deadtree'); else if (r < .012 + .008 * kR) addObj(x, y, 'rock');
     }
   }
 }
 
 function randomLandTile(rng, minD, maxD) {
-  const cx = G.W / 2, cy = G.H / 2;
+  const cx = G.W / 2, cy = G.H / 2, f = wScale(); minD *= f; maxD *= f;
   for (let k = 0; k < 400; k++) {
     const a = rng.range(0, TAU), d = rng.range(minD, maxD);
     const tx = Math.round(cx + Math.cos(a) * d), ty = Math.round(cy + Math.sin(a) * d);
@@ -408,7 +439,7 @@ function spawnAnimals(rng) {
   G.mobs = G.mobs || [];
   const mk = (t, n, d0, d1) => { for (let i = 0; i < n; i++) { const p = randomLandTile(rng, d0, d1); if (p) G.mobsInit.push({ t, x: p[0] * TS + 16, y: p[1] * TS + 16 }); } };
   G.mobsInit = [];
-  mk('rabbit', 26, 4, 60); mk('deer', 14, 8, 62); mk('boar', 12, 10, 62); mk('wolf', 12, 16, 64); mk('hound', 5, 42, 64); mk('bear', 3, 46, 66);
+  const q = wScale() * wScale(); mk('rabbit', Math.round(26 * q), 4, 60); mk('deer', Math.round(14 * q), 8, 62); mk('boar', Math.round(12 * q), 10, 62); mk('wolf', Math.round(12 * q), 16, 64); mk('hound', Math.max(3, Math.round(5 * q)), 42, 64); mk('bear', Math.max(2, Math.round(3 * q)), 46, 66);
 }
 
 function buildStartCamp(rng) {
@@ -432,7 +463,7 @@ function buildStartCamp(rng) {
 // ===== Zones radioactives =====
 function genRadZones(rng) {
   G.radZones = []; const fake = { id: -2, crates: [] };
-  for (let k = 0; k < 5; k++) {
+  for (let k = 0; k < Math.max(3, Math.round(5 * wScale() * wScale())); k++) {
     for (let tries = 0; tries < 800; tries++) {
       const t = randomLandTile(rng, 20, 64); if (!t) continue;
       const rt = rng.int(5, 8), tx = t[0], ty = t[1];
@@ -473,11 +504,33 @@ function genVehicles(rng) {
   const sx = G.spawn.x, sy = G.spawn.y;
   for (let k = 0; k < 40; k++) { const x = sx + rng.range(-160, 160), y = sy + rng.range(100, 220); if (okAt(x, y, 18)) { const v = newVehicle('moto', x, y); v.fuel = v.def.fuel * .3; v.hp = v.maxhp * .8; v.ang = rng.range(0, TAU); G.vehicles.push(v); break; } }
   // le long des routes
-  let n = 0; for (let tries = 0; tries < 4000 && n < 9; tries++) { const tx = rng.int(4, G.W - 5), ty = rng.int(4, G.H - 5); if (G.tiles[IDX(tx, ty)] !== T.ROAD) continue; const x = tx * TS + 16, y = ty * TS + 16; if (!okAt(x, y, 22)) continue; if (G.vehicles.some(v => dist(v.x, v.y, x, y) < 400)) continue; mk(x, y); n++; }
+  let n = 0; const maxV = Math.max(5, Math.round(9 * wScale() * wScale())); for (let tries = 0; tries < 4000 && n < maxV; tries++) { const tx = rng.int(4, G.W - 5), ty = rng.int(4, G.H - 5); if (G.tiles[IDX(tx, ty)] !== T.ROAD) continue; const x = tx * TS + 16, y = ty * TS + 16; if (!okAt(x, y, 22)) continue; if (G.vehicles.some(v => dist(v.x, v.y, x, y) < 400)) continue; mk(x, y); n++; }
   // stations-service et fermes
   for (const p of G.pois) if ((p.type === 'gas' || p.type === 'farm') && p.front) {
     for (let k = 0; k < 20; k++) { const x = (p.front.fx + rng.int(-5, 5)) * TS + 16, y = (p.front.fy + rng.int(-5, 5)) * TS + 16; if (okAt(x, y, 22) && !G.vehicles.some(v => dist(v.x, v.y, x, y) < 100)) { mk(x, y); break; } }
   }
   // près du village
   const v0 = G.village; if (v0) for (let k = 0; k < 30; k++) { const x = (v0.front.fx - 4 + rng.int(-2, 2)) * TS, y = (v0.front.fy + rng.int(-4, 4)) * TS; if (okAt(x, y, 22)) { const v = newVehicle('car', x, y); v.fuel = v.def.fuel * .35; v.hp = v.maxhp * .7; G.vehicles.push(v); break; } }
+}
+
+// ===== Aperçu du monde (écran titre) : génère un monde complet dans un état temporaire =====
+function previewWorld(seed, opts, cv) {
+  const prev = G; const sz = (WORLD_SIZES[opts.size] || WORLD_SIZES.M).v;
+  G = { W: sz, H: sz, seed, style: opts.style, dens: opts.dens, nextCrate: 0, nextVid: 0, mobsInit: [] };
+  try {
+    genWorld(seed);
+    const S = cv.width, k = S / sz, c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+    const img = c.createImageData(S, S);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const i = Math.floor(y / k) * sz + Math.floor(x / k), t = G.tiles[i]; let col = MINICOL[t] || '#444';
+      if (t === T.WATER) { const sd = G.shore[i]; col = sd <= 1 ? '#3a78a8' : sd <= 3 ? '#2a5a8a' : '#1e4470'; }
+      const o = G.objs.get(i); if (o && (o.k === 'tree')) col = '#24481e';
+      const v = parseInt(col.slice(1), 16), j = (y * S + x) * 4; img.data[j] = v >> 16 & 255; img.data[j + 1] = v >> 8 & 255; img.data[j + 2] = v & 255; img.data[j + 3] = 255;
+    }
+    c.putImageData(img, 0, 0);
+    for (const p of G.pois) { if (p.hidden) continue; const col = p.type === 'village' ? '#5f8' : (p.type === 'camp' || p.type === 'legion') ? '#f55' : p.type === 'house' || p.type === 'cabin' ? '#c8b080' : '#8ac'; c.fillStyle = col; const r = p.type === 'village' ? 4 : (p.w > 10 ? 3 : 2); c.fillRect(p.cx / TS * k - r, p.cy / TS * k - r, r * 2, r * 2); }
+    for (const z of G.radZones) { c.strokeStyle = '#9aff4a'; c.lineWidth = 1; c.beginPath(); c.arc(z.x / TS * k, z.y / TS * k, z.r / TS * k, 0, TAU); c.stroke(); }
+    c.fillStyle = '#ff0'; c.beginPath(); c.arc(G.spawn.x / TS * k, G.spawn.y / TS * k, 3, 0, TAU); c.fill();
+    return { pois: G.pois.length, zones: G.radZones.length, vehicles: G.vehicles.length };
+  } finally { G = prev; }
 }
