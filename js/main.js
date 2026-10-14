@@ -150,11 +150,12 @@ function buildSettings() {
   const check = k => '<input type="checkbox" data-set="' + k + '"' + (SET[k] ? ' checked' : '') + '>';
   $('settings').innerHTML = '<div class="box wide"><h2>⚙️ Options</h2>' +
     row('Volume des effets', slider('vol', 0, 1, .05)) + row('Ambiance sonore', slider('music', 0, 1, .05)) + row('Tremblements d\'écran', slider('shake', 0, 1.5, .1)) + row('Taille de l\'interface', slider('hud', .8, 1.4, .05)) +
-    row('Mode 3D low-poly (bêta, F3)', check('mode3d')) + row('Qualité graphique élevée', check('quality')) + row('Nombres de dégâts', check('dmgNums')) + row('Hit-stop (impact)', check('hitstop')) + row('Conseils contextuels', check('tips')) + row('Tutoriel au démarrage', check('tutorial')) + row('Pause si fenêtre inactive', check('autopause')) +
+    row('Mode 3D low-poly (bêta, F3)', check('mode3d')) + row('Résolution 3D', '<select data-sel="res3d"><option value="0">Auto (adaptative)</option><option value="0.5">Basse (50 %)</option><option value="0.75">Moyenne (75 %)</option><option value="1">Native (100 %)</option><option value="1.5">Haute (150 %)</option></select>') + row('Qualité graphique élevée', check('quality')) + row('Nombres de dégâts', check('dmgNums')) + row('Hit-stop (impact)', check('hitstop')) + row('Conseils contextuels', check('tips')) + row('Tutoriel au démarrage', check('tutorial')) + row('Pause si fenêtre inactive', check('autopause')) +
     '<div class="srow"><button id="btnTips">Réafficher tous les conseils</button><button id="btnSetClose" class="pri">Fermer</button></div></div>';
   $('settings').querySelectorAll('input[data-set]').forEach(inp => {
     inp.oninput = () => { const k = inp.dataset.set; SET[k] = inp.type === 'checkbox' ? (k === 'quality' ? (inp.checked ? 1 : 0) : inp.checked) : +inp.value; const sv = $('settings').querySelector('[data-sv="' + k + '"]'); if (sv) sv.textContent = Math.round(SET[k] * 100) + '%'; saveSettings(); if (k === 'mode3d') setMode3D(SET.mode3d); if (k === 'music' && SFX.ctx) SFX.drone(.3); };
   });
+  $('settings').querySelectorAll('select[data-sel]').forEach(sl => { sl.value = String(SET[sl.dataset.sel] || 0); sl.onchange = () => { SET[sl.dataset.sel] = +sl.value; saveSettings(); }; });
   $('btnTips').onclick = () => { TIPS_SEEN = {}; saveTips(); SFX.play('ui'); };
   $('btnSetClose').onclick = closeSettings;
 }

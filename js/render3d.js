@@ -128,7 +128,7 @@ function r3init() {
   R3.camPos = { x: 0, y: 0, z: 0 }; R3.camInit = false;
   if (!SET.mode3d) cv.style.display = 'none';
 }
-function r3resize() { if (!R3.ready) return; R3.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, SET.quality > 0 ? 1.5 : 1)); R3.renderer.setSize(VW, VH, false); R3.cam.aspect = VW / VH; R3.cam.updateProjectionMatrix(); }
+function r3resize() { if (!R3.ready) return; R3.renderer.setPixelRatio(R3.res || r3resMax()); R3.renderer.setSize(VW, VH, false); R3.cam.aspect = VW / VH; R3.cam.updateProjectionMatrix(); }
 
 // ---------- préfabriqués d'objets (instanciés) ----------
 function r3prefabs() {

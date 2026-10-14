@@ -76,9 +76,7 @@ function render3(time) {
   const pitch = 66 * Math.PI / 180, D = 1.62 * VH / TS * .92 * (R3.zoom = R3.zoom || SET.zoom3d || 1.12);
   R3.cam.position.set(R3.tx + ox / TS * .5, R3.ty + D * Math.sin(pitch) + oy / TS * .5, R3.tz + D * Math.cos(pitch)); R3.cam.lookAt(R3.tx, R3.ty, R3.tz); R3.cam.updateMatrixWorld(); R3.camReady = true;
   if (R3.cam.aspect !== VW / VH) { R3.cam.aspect = VW / VH; R3.cam.updateProjectionMatrix(); r3resize(); }
-  // résolution adaptative : on baisse la définition si la machine peine, on la remonte si elle a de la marge
-  { const raw = (R3.rawT ? performance.now() - R3.rawT : 16); R3.rawT = performance.now(); R3.ema = (R3.ema || 16) * .96 + Math.min(raw, 100) * .04; R3.res = R3.res || Math.min(window.devicePixelRatio || 1, SET.quality > 0 ? 1.5 : 1); R3.resMax = Math.min(window.devicePixelRatio || 1, SET.quality > 0 ? 1.5 : 1);
-    if (!window.__noAdapt && fr % 40 === 0) { let nr = R3.res; if (R3.ema > 27 && nr > .6) nr = Math.max(.6, nr * .85); else if (R3.ema < 15 && nr < R3.resMax) nr = Math.min(R3.resMax, nr / .92); if (Math.abs(nr - R3.res) > .01) { R3.res = nr; R3.renderer.setPixelRatio(nr); R3.renderer.setSize(VW, VH, false); } } }
+  r3adapt(time, fr);
   if (!R3.warm) { R3.warm = [...new Set(Object.values(POITYPES).map(d => d.icon).concat(['🏠']))]; }
   if (R3.warm.length && fr % 3 === 0) iconTex(R3.warm.pop());
   const vr = r3viewRect();
@@ -129,7 +127,7 @@ function render3(time) {
   r3overlay(c, time, vr);
   drawWeather(c, time);
   drawHUD(c, time);
-  if (R3.showStats) { c.font = '11px monospace'; c.fillStyle = '#9fe8ff'; c.textAlign = 'left'; c.fillText('3D  tris ' + R3.stats.tris + '  zoom ' + (R3.zoom || 1).toFixed(2) + '  rés ' + (R3.res || 1).toFixed(2) + '  fps~' + Math.round(1000 / (R3.ema || 16)) + '  appels ' + R3.stats.calls + '  chunks ' + R3.stats.chunks + '/' + R3.chunks.size + ' (+' + R3.stats.built + ')  instances ' + R3.stats.inst + '  masqués ' + R3.stats.culled + '  entités ' + R3.ents.size, 12, VH - 24); }
+  if (R3.showStats) { c.font = '11px monospace'; c.fillStyle = '#9fe8ff'; c.textAlign = 'left'; c.fillText('3D  tris ' + R3.stats.tris + '  zoom ' + (R3.zoom || 1).toFixed(2) + '  rés ' + (R3.res || 1).toFixed(2) + (+SET.res3d ? ' (fixe)' : ' (auto)') + '  fps~' + Math.round(1000 / ((R3.hist && R3.hist.length ? R3.hist.reduce((a, b) => a + b, 0) / R3.hist.length : 16.7))) + '  appels ' + R3.stats.calls + '  chunks ' + R3.stats.chunks + '/' + R3.chunks.size + ' (+' + R3.stats.built + ')  instances ' + R3.stats.inst + '  masqués ' + R3.stats.culled + '  entités ' + R3.ents.size, 12, VH - 24); }
 }
 
 R3.FX_KINDS = { crate: 1, mast: 1, tank: 1, pylon: 1, screen: 1, plane: 1, fire: 1, ferris: 1, carousel: 1, altar: 1 };
@@ -384,4 +382,27 @@ function r3banners(time, inR) {
     }
     arr.forEach((g, i) => { g.visible = true; const [tx, ty] = g.userData.pos; g.position.set(tx, r3ground(tx * TS, ty * TS), ty); g.userData.cloth.rotation.y = Math.sin(time * 2.2 + i * 1.7) * .22; });
   }
+}
+
+// ----- résolution : automatique (médiane glissante, hystérésis) ou fixe (Options) -----
+function r3resMax() { return Math.min(window.devicePixelRatio || 1, SET.quality > 0 ? 1.5 : 1); }
+function r3setRes(r) { r = clamp(r, .4, 2); if (Math.abs(r - (R3.res || 0)) < .005) return; R3.res = r; R3.renderer.setPixelRatio(r); R3.renderer.setSize(VW, VH, false); }
+function r3adapt(time, fr) {
+  const max = r3resMax(), fixed = +SET.res3d || 0;
+  if (R3.res === undefined) { R3.res = max; R3.hist = []; R3.lastChange = time * 1000; R3.capUp = max; R3.capUntil = 0; R3.calm = 0; }
+  if (fixed > 0) { r3setRes(Math.min(fixed, 2)); R3.hist.length = 0; return; }
+  const delta = R3.prevT ? (time - R3.prevT) * 1000 : 16.7; R3.prevT = time;
+  if (delta > 0 && delta < 120 && !R3.stats.built && fr > 60 && !G.paused && !document.hidden) { R3.hist.push(delta); if (R3.hist.length > 120) R3.hist.shift(); }
+  if (window.__noAdapt) { r3setRes(Math.min(R3.res, max)); return; }
+  if (fr % 30 || R3.hist.length < 90) return;
+  const sorted = R3.hist.slice().sort((a, b) => a - b), p75 = sorted[Math.floor(sorted.length * .75)], p20 = sorted[Math.floor(sorted.length * .2)];
+  if (!R3.base) R3.base = 16.7; // on suppose un écran 60 Hz ; on s'ajuste aux écrans plus rapides, ou plus lents si même au minimum de définition on reste calé sur ~30 Hz
+  if (p20 < R3.base - 2) R3.base = Math.max(6.5, p20); else if (R3.res <= .55 && p20 > 28 && p75 < p20 * 1.15) R3.base = Math.min(p20, 40);
+  const now = time * 1000, since = now - R3.lastChange;
+  if (p75 > R3.base * 1.3 + 1.5 && R3.res > .5 && since > 1500) { // la machine peine : on réduit proportionnellement
+    const k = clamp((R3.base * 1.2) / p75, .72, .92); R3.capUp = R3.res; R3.capUntil = now + 40000; r3setRes(Math.max(.5, R3.res * k)); R3.lastChange = now; R3.hist.length = 0; R3.calm = 0;
+  } else if (p75 < R3.base * 1.1 + 1) { // large marge : on remonte doucement, sans dépasser le niveau qui avait posé problème
+    R3.calm += 30; const lim = now < R3.capUntil ? Math.min(max, R3.capUp * .98) : max;
+    if (R3.calm >= 240 && since > 6000 && R3.res < lim - .01) { r3setRes(Math.min(lim, R3.res + .1)); R3.lastChange = now; R3.hist.length = 0; R3.calm = 0; }
+  } else R3.calm = 0;
 }
