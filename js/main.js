@@ -126,6 +126,11 @@ function frame(ts) {
 }
 
 function startGame(opts) {
+  let ov = document.getElementById('genov'); if (!ov) { ov = document.createElement('div'); ov.id = 'genov'; ov.style.cssText = 'position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;background:rgba(8,12,16,.86);color:#e8e0c8;font:600 20px sans-serif;letter-spacing:.04em'; document.body.appendChild(ov); }
+  ov.textContent = '🌍 Génération du monde…'; ov.style.display = 'flex';
+  setTimeout(() => { try { startGame2(opts); } finally { ov.style.display = 'none'; } }, 40);
+}
+function startGame2(opts) {
   SFX.init(); SFX.setVol();
   initGame(opts);
   $('title').classList.add('hidden'); stopTitleBg();
@@ -226,5 +231,5 @@ window.addEventListener('load', () => {
   $('help2').addEventListener('click', e => { if (e.target.id === 'help2' || e.target.closest('[data-x]')) toggleHelp(); });
   setupTitle();
   requestAnimationFrame(frame);
-  window.__dbg = { G: () => G, P: () => P, start: startGame };
+  window.__dbg = { G: () => G, P: () => P, start: startGame2 };
 });

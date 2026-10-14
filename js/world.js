@@ -111,7 +111,7 @@ function addObj(tx, ty, kind, props) {
 function removeObj(o) { const i = IDX(o.tx, o.ty); G.objs.delete(i); if (G.solid[i] === SO.OBJ) G.solid[i] = 0; }
 
 // ----- options de monde -----
-const WORLD_SIZES = { S: { n: 'Petit', v: 130 }, M: { n: 'Moyen', v: 180 }, L: { n: 'Grand', v: 240 } };
+const WORLD_SIZES = { S: { n: 'Petit', v: 390 }, M: { n: 'Moyen', v: 540 }, L: { n: 'Grand', v: 720 } };
 const WORLD_STYLES = {
   balanced: { n: 'Équilibré', scale: 30, off: .07, moist: 0, trees: 1, rocks: 1, wrecks: 1, lakes: 0 },
   forest:   { n: 'Forêts denses', scale: 30, off: .07, moist: .14, trees: 1.35, rocks: .8, wrecks: .8, lakes: 0 },
@@ -120,6 +120,7 @@ const WORLD_STYLES = {
 };
 const WORLD_DENS = { 0: { n: 'Rare', k: .6 }, 1: { n: 'Normal', k: 1 }, 2: { n: 'Dense', k: 1.4 } };
 function wScale() { return G.W / 150; }
+function wDens() { const f = wScale(); return f * f / 2.4; } // nombre d'éléments : croît moins vite que la surface (monde aéré)
 function genTerrain(seed) {
   const W = G.W, H = G.H, N = W * H, st = WORLD_STYLES[G.style] || WORLD_STYLES.balanced, f = W / 150;
   G.tiles = new Uint8Array(N); G.solid = new Uint8Array(N); G.reserve = new Uint8Array(N); G.fp = new Uint8Array(N); G.moist = new Float32Array(N);
@@ -184,7 +185,7 @@ function placePOIs(rng) {
   for (const k of ['hospital', 'camp', 'legion', 'castle', 'drivein', 'police', 'prison', 'lab', 'hive', 'mine', 'school', 'firestation', 'church', 'trailer', 'crash', 'funfair', 'powerplant', 'graveyard', 'lighthouse', 'diner', 'market', 'warehouse', 'bunker', 'radio', 'farm', 'gas', 'cabin', 'house']) {
     if (k === 'nomads') continue;
     const sparse = ['house', 'cabin', 'farm', 'gas', 'camp'].includes(k) ? .55 : .8; // monde aéré : moins de lieux, plus d'espace
-    const n = Math.max(UNIQ[k] || 3, Math.round(POICOUNT[k] * f * f * dk * sparse * (f < 1 ? 1.25 : 1)));
+    const n = Math.max(UNIQ[k] || 3, Math.round(POICOUNT[k] * wDens() * dk * sparse * (f < 1 ? 1.25 : 1)));
     for (let i = 0; i < n; i++) order.push([k, 1]);
   }
   const rng_d = { nomads: [18, 40], church: [12, 60], school: [18, 56], diner: [10, 60], firestation: [18, 56], lab: [30, 58], lighthouse: [20, 62], prison: [34, 60], trailer: [14, 60], mine: [26, 60], hive: [46, 64], crash: [20, 62], funfair: [20, 58], drivein: [16, 58], powerplant: [30, 62], castle: [36, 62], graveyard: [12, 60], village: [26, 34], hospital: [24, 55], police: [18, 50], market: [20, 55], warehouse: [26, 60], bunker: [46, 64], legion: [44, 64], camp: [24, 58], radio: [34, 62], farm: [16, 60], gas: [12, 60], cabin: [14, 62], house: [8, 64] };
@@ -566,7 +567,7 @@ function scatterObjects(rng) {
     const i = y * W + x, t = G.tiles[i];
     if (G.solid[i] || G.objs.has(i) || G.reserve[i]) continue;
     if (Math.hypot(x - sx, y - sy) < 4) continue;
-    const r = rng.next() * (t === T.FOREST ? 1.2 : 2.1), cl = vnoise(x / 3.5, y / 3.5, G.seed + 9);
+    const r = rng.next() * (t === T.FOREST ? 1.35 : 2.6), cl = vnoise(x / 3.5, y / 3.5, G.seed + 9);
     if (t === T.ROAD) { if (r < .012 * kW) addObj(x, y, 'wreck', { ang: rng.range(0, TAU) }); else if (r < .02) addObj(x, y, 'scrappile'); continue; }
     if (t === T.FOREST) {
       const dens = Math.min(.6, (.22 + cl * .35) * kT);
@@ -602,7 +603,7 @@ function spawnAnimals(rng) {
   G.mobs = G.mobs || [];
   const mk = (t, n, d0, d1) => { for (let i = 0; i < n; i++) { const p = randomLandTile(rng, d0, d1); if (p) G.mobsInit.push({ t, x: p[0] * TS + 16, y: p[1] * TS + 16 }); } };
   G.mobsInit = [];
-  const q = wScale() * wScale(); mk('rabbit', Math.round(17 * q), 4, 60); mk('deer', Math.round(9 * q), 8, 62); mk('boar', Math.round(7 * q), 10, 62); mk('wolf', Math.round(7 * q), 16, 64); mk('spider', Math.max(3, Math.round(6 * q)), 22, 64); mk('scorpion', Math.max(3, Math.round(6 * q)), 22, 64); mk('hound', Math.max(3, Math.round(5 * q)), 42, 64); mk('bear', Math.max(2, Math.round(3 * q)), 46, 66);
+  const q = wDens() * .5; mk('rabbit', Math.round(17 * q), 4, 60); mk('deer', Math.round(9 * q), 8, 62); mk('boar', Math.round(7 * q), 10, 62); mk('wolf', Math.round(7 * q), 16, 64); mk('spider', Math.max(3, Math.round(6 * q)), 22, 64); mk('scorpion', Math.max(3, Math.round(6 * q)), 22, 64); mk('hound', Math.max(3, Math.round(5 * q)), 42, 64); mk('bear', Math.max(2, Math.round(3 * q)), 46, 66);
 }
 
 function buildStartCamp(rng) {
@@ -626,7 +627,7 @@ function buildStartCamp(rng) {
 // ===== Zones radioactives =====
 function genRadZones(rng) {
   G.radZones = []; const fake = { id: -2, crates: [] };
-  for (let k = 0; k < Math.max(3, Math.round(5 * wScale() * wScale())); k++) {
+  for (let k = 0; k < Math.max(3, Math.round(5 * wDens())); k++) {
     for (let tries = 0; tries < 800; tries++) {
       const t = randomLandTile(rng, 20, 64); if (!t) continue;
       const rt = rng.int(5, 8), tx = t[0], ty = t[1];
@@ -667,7 +668,7 @@ function genVehicles(rng) {
   const sx = G.spawn.x, sy = G.spawn.y;
   for (let k = 0; k < 40; k++) { const x = sx + rng.range(-160, 160), y = sy + rng.range(100, 220); if (okAt(x, y, 18)) { const v = newVehicle('moto', x, y); v.fuel = v.def.fuel * .3; v.hp = v.maxhp * .8; v.ang = rng.range(0, TAU); G.vehicles.push(v); break; } }
   // le long des routes
-  let n = 0; const maxV = Math.max(5, Math.round(9 * wScale() * wScale())); for (let tries = 0; tries < 4000 && n < maxV; tries++) { const tx = rng.int(4, G.W - 5), ty = rng.int(4, G.H - 5); if (G.tiles[IDX(tx, ty)] !== T.ROAD) continue; const x = tx * TS + 16, y = ty * TS + 16; if (!okAt(x, y, 22)) continue; if (G.vehicles.some(v => dist(v.x, v.y, x, y) < 400)) continue; mk(x, y); n++; }
+  let n = 0; const maxV = Math.max(5, Math.round(9 * wDens())); for (let tries = 0; tries < 4000 && n < maxV; tries++) { const tx = rng.int(4, G.W - 5), ty = rng.int(4, G.H - 5); if (G.tiles[IDX(tx, ty)] !== T.ROAD) continue; const x = tx * TS + 16, y = ty * TS + 16; if (!okAt(x, y, 22)) continue; if (G.vehicles.some(v => dist(v.x, v.y, x, y) < 400)) continue; mk(x, y); n++; }
   // stations-service et fermes
   for (const p of G.pois) if ((p.type === 'gas' || p.type === 'farm') && p.front) {
     for (let k = 0; k < 20; k++) { const x = (p.front.fx + rng.int(-5, 5)) * TS + 16, y = (p.front.fy + rng.int(-5, 5)) * TS + 16; if (okAt(x, y, 22) && !G.vehicles.some(v => dist(v.x, v.y, x, y) < 100)) { mk(x, y); break; } }
