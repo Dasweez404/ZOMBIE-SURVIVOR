@@ -44,7 +44,14 @@ function costText(cost) { return Object.keys(cost).map(k => (ITEMS[k] ? ITEMS[k]
 // ===== Armes =====
 function makeWeapon(id) {
   const b = WEAPONS[id];
-  return { kind: 'w', id, lvl: 1, mag: b.mag || 0, att: {} };
+  return { kind: 'w', id, lvl: 1, mag: b.mag || 0, att: {}, dur: 100 };
+}
+function durOf(w) { return w.dur === undefined ? 100 : w.dur; }
+function repairCost(w) { const m = 100 - durOf(w), t = Math.max(1, Math.round(((WEAPONS[w.id].v || 20) / 40))); return cleanCost({ scrap: Math.ceil(m / 14), metal: Math.ceil(m / 45 * Math.min(2, t)) }); }
+function wearGear(w, a) {
+  const was = durOf(w); w.dur = Math.max(0, was - a);
+  if (was >= 35 && w.dur < 35) { msg('⚠ ' + gearName(w) + ' est usé (' + Math.round(w.dur) + '%) — réparez-le (Tab → Établi).', '#ffb060'); SFX.play('click', .6); }
+  else if (was >= 12 && w.dur < 12) { msg('⚠ ' + gearName(w) + ' va lâcher : il s\'enraye et frappe moins fort !', '#ff7a6a'); SFX.play('click', .8); }
 }
 function makeArmor(id) { return { kind: 'a', id, lvl: 1 }; }
 function gearName(g) { return (g.kind === 'w' ? WEAPONS[g.id].n : ARMOR[g.id].n) + (g.lvl > 1 ? ' +' + (g.lvl - 1) : ''); }
@@ -53,12 +60,14 @@ function wstat(inst) {
   const b = WEAPONS[inst.id], lv = inst.lvl - 1, o = Object.assign({}, b);
   o.dmg = b.dmg * (1 + .14 * lv);
   o.rate = b.rate * (1 - .03 * lv);
+  const q = Math.min(1, durOf(inst) / 100), wear = q < .5 ? .5 - q : 0; // usure : au-dessous de 50 %
+  if (wear) { o.dmg *= 1 - wear * .6; o.rate *= 1 + wear * .5; }
   if (b.melee) {
     o.dmg *= 1 + .12 * P.skills.str;
     return o;
   }
   o.mag = Math.round(b.mag * (1 + (lv >= 2 ? .2 : 0)));
-  o.spr = b.spr * (1 - .08 * P.skills.aim) * (1 - .04 * lv);
+  o.spr = b.spr * (1 - .08 * P.skills.aim) * (1 - .04 * lv) * (1 + wear * 1.2);
   o.rel = b.rel * (1 - .07 * P.skills.aim);
   o.noiseR = b.noise; o.zoom = 0; o.laser = 0;
   for (const slot in inst.att) {
@@ -133,4 +142,4 @@ function clockText() {
   const h = (5 + phaseOf(G.clock) * 24) % 24; const hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
   return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
 }
-function difficultyMul() { return G.diff === 0 ? { hp: .8, dmg: .7, hun: .7, cnt: .45 } : G.diff === 2 ? { hp: 1.3, dmg: 1.35, hun: 1.3, cnt: .85 } : { hp: 1, dmg: 1, hun: 1, cnt: .62 }; }
+function difficultyMul() { return G.diff === 0 ? { hp: .8, dmg: .7, hun: .7, cnt: .36 } : G.diff === 2 ? { hp: 1.3, dmg: 1.35, hun: 1.3, cnt: .7 } : { hp: 1, dmg: 1, hun: 1, cnt: .5 }; }

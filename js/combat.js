@@ -127,6 +127,10 @@ function killMob(m, o) {
   G.decals.push({ corpse: true, x: m.x, y: m.y, r: m.r, col: def.col, ang: m.aang || 0, life: 50, human: !!def.human }); if (G.decals.length > 300) G.decals.shift();
   if (o.src) { if (G.hitm) { G.hitm.kill = true; G.hitm.t = .24; } else G.hitm = { t: .24, kill: true }; SFX.play('killm', .7); if (def.hp >= 200 || def.boss) hitstop(.07); else hitstop(.02); }
   if (def.boss) { G.slowT = .9; }
+  if (hostile && o.src) { // série de kills
+    G.combo = (G.comboT > 0 ? G.combo : 0) + 1; G.comboT = 4.5; G.comboPop = .35;
+    if (G.combo >= 5 && G.combo % 5 === 0) { addXP(G.combo * 2); addText(P.x, P.y - 44, 'SÉRIE x' + G.combo + ' ! +' + G.combo * 2 + ' XP', '#ffd86a', true); SFX.play('levelup', .5); shake(2); }
+  }
   SFX.play(def.fac === 'undead' ? 'zdie' : 'thud', .6);
   const hunt = 1 + .15 * P.skills.hunt;
   if (def.fac === 'undead') dropTable(ZDROPS, m.x, m.y, 1 + G.day * .02);

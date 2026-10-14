@@ -74,7 +74,7 @@ function invHTML() {
   P.slots.forEach((w, i) => {
     if (w) {
       const b = WEAPONS[w.id]; const att = Object.keys(w.att).filter(k => w.att[k]).map(k => ITEMS[w.att[k]].i).join('');
-      h += '<div class="item gear' + (i === P.sel ? ' sel' : '') + '"><span class="ic">' + b.i + '</span><span class="nm">' + (i + 1) + '. ' + esc(gearName(w)) + ' ' + att + '<br><small>' + gunStatText(w) + '</small></span><button class="sm" data-act="unslot" data-a="' + i + '">Ranger</button></div>';
+      h += '<div class="item gear' + (i === P.sel ? ' sel' : '') + '"><span class="ic">' + b.i + '</span><span class="nm">' + (i + 1) + '. ' + esc(gearName(w)) + ' ' + att + '<br>' + durHTML(w) + '<br><small>' + gunStatText(w) + '</small></span><button class="sm" data-act="unslot" data-a="' + i + '">Ranger</button></div>';
     } else h += '<div class="item empty">' + (i + 1) + '. — emplacement vide —</div>';
   });
   h += '</div><h3>Armure</h3><div class="list">';
@@ -92,6 +92,7 @@ function invHTML() {
   return h;
 }
 function armorExtra(g) { const a = ARMOR[g.id]; return ' · 🔥 chaleur +' + (a.warm || 0) + (a.rad ? ' · ☢️ -' + Math.round(a.rad * 100) + '% radiation' : ''); }
+function durHTML(w) { const d = Math.round(durOf(w)), col = d > 50 ? '#8ad08a' : d > 25 ? '#e8b850' : '#ff6a5a'; return '<span class="dur" title="Usure"><i style="width:' + d + '%;background:' + col + '"></i></span> <small style="color:' + col + '">' + d + '%</small>'; }
 function gunStatText(w) {
   const b = WEAPONS[w.id], s = wstat(w);
   if (b.melee) return 'Dégâts ' + s.dmg.toFixed(0) + ' · cadence ' + (1 / s.rate).toFixed(1) + '/s · portée ' + s.range;
@@ -135,7 +136,7 @@ function modsHTML() {
   P.slots.forEach((w, i) => { if (w) all.push([w, 's' + i]); }); P.gear.forEach((g, i) => { if (g.kind === 'w') all.push([g, 'g' + i]); });
   for (const [w, ref] of all) {
     const b = WEAPONS[w.id], cost = costOf(cleanCost(upgradeCost(w))), ok = hasItems(cost) && wb && w.lvl < 5;
-    h += '<div class="item gear col1"><span class="ic">' + b.i + '</span><span class="nm">' + esc(gearName(w)) + '<br><small>' + gunStatText(w) + '</small><br><small class="cost">Amélio. : ' + (w.lvl >= 5 ? 'max' : Object.keys(cost).map(k => '<span class="' + (invCount(k) >= cost[k] ? 'ok' : 'no') + '">' + ITEMS[k].i + cost[k] + '</span>').join(' ')) + '</small></span><button data-act="upg" data-a="' + ref + '"' + (ok ? '' : ' disabled') + '>⬆ Améliorer</button></div>';
+    h += '<div class="item gear col1"><span class="ic">' + b.i + '</span><span class="nm">' + esc(gearName(w)) + '<br>' + durHTML(w) + '<br><small>' + gunStatText(w) + '</small><br><small class="cost">Amélio. : ' + (w.lvl >= 5 ? 'max' : Object.keys(cost).map(k => '<span class="' + (invCount(k) >= cost[k] ? 'ok' : 'no') + '">' + ITEMS[k].i + cost[k] + '</span>').join(' ')) + '</small></span><button data-act="upg" data-a="' + ref + '"' + (ok ? '' : ' disabled') + '>⬆ Améliorer</button>' + (durOf(w) < 99 ? (() => { const rc = repairCost(w), rok = hasItems(rc); return '<button class="sm" data-act="repair" data-a="' + ref + '"' + (rok ? '' : ' disabled') + ' title="' + (wb ? 'Réparation complète' : 'Réparation de fortune (jusqu\'à 60 %)') + '">🔧 Réparer ' + Object.keys(rc).map(k => ITEMS[k].i + rc[k]).join(' ') + '</button>'; })() : '') + '</div>';
     if (!b.melee && b.mods.length) {
       h += '<div class="slots">';
       for (const sl of b.mods) {
@@ -308,7 +309,12 @@ const ACT = {
   upg(a) {
     const g = resolveGear(a); if (!g || g.lvl >= 5 || !nearStation('workbench')) return;
     const cost = costOf(cleanCost(upgradeCost(g))); if (!hasItems(cost)) return;
-    payItems(cost); g.lvl++; msg(gearName(g) + ' amélioré !', '#ffe070'); SFX.play('levelup'); addXP(10); renderPanel();
+    payItems(cost); g.lvl++; if (g.kind === 'w') g.dur = 100; msg(gearName(g) + ' amélioré !', '#ffe070'); SFX.play('levelup'); addXP(10); renderPanel();
+  },
+  repair(a) {
+    const g = resolveGear(a); if (!g || g.kind !== 'w') return; const rc = repairCost(g); if (!hasItems(rc)) return;
+    const wb = nearStation('workbench'), cap = wb ? 100 : 60; if (durOf(g) >= cap) { msg(wb ? 'Déjà en bon état.' : 'Réparation de fortune au maximum — allez à un établi.', '#e0a050'); return; }
+    payItems(rc); g.dur = Math.max(durOf(g), cap); msg('🔧 ' + gearName(g) + ' réparé (' + Math.round(g.dur) + '%).', '#9fe8a8'); SFX.play('build'); renderPanel();
   },
   attach(a) { const [ref, mod] = a.split(':'); const g = resolveGear(ref); if (!g || invCount(mod) < 1 || !nearStation('workbench')) { if (!nearStation('workbench')) msg('Il faut un établi.', '#e0a050'); return; } invTake(mod, 1); g.att[ITEMS[mod].slot] = mod; SFX.play('reload'); renderPanel(); },
   detach(a) { const [ref, sl] = a.split(':'); const g = resolveGear(ref); if (!g || !g.att[sl] || !nearStation('workbench')) { if (!nearStation('workbench')) msg('Il faut un établi.', '#e0a050'); return; } const mod = g.att[sl]; delete g.att[sl]; giveItem(mod, 1, true); const s = wstat(g); g.mag = Math.min(g.mag, s.mag); renderPanel(); },

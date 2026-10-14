@@ -128,3 +128,5 @@ h3 small{color:var(--mut);font-weight:400}
 .wnote{margin:2px 0 0;font-size:11px;color:var(--mut);max-width:260px;line-height:1.35}
 #seedinfo{font-size:12px;color:var(--mut);display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap}
 #seedinfo b{color:var(--ac2);font-variant-numeric:tabular-nums}
+
+.dur{display:inline-block;width:70px;height:6px;border-radius:3px;background:rgba(255,255,255,.14);vertical-align:middle;overflow:hidden}.dur i{display:block;height:100%}

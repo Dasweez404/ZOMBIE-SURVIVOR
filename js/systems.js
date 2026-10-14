@@ -354,7 +354,7 @@ function updateSpawning(dt) {
 // ---------- Mise à jour principale ----------
 function updateGame(dt) {
   G.clock += dt; G.dark = darkness(phaseOf(G.clock)); G.tick++;
-  G.playTime += dt;
+  G.playTime += dt; if (G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) G.combo = 0; } if (G.comboPop > 0) G.comboPop -= dt;
   if (!P.dead) updatePlayer(dt);
   // champs de flux
   G.flowT -= dt;

@@ -27,7 +27,7 @@ function spawnMob(type, x, y, o) {
     homeX: x, homeY: y, poi: o.poi === undefined ? null : o.poi, wx: x, wy: y, wt: rnd(0, 3), aang: rnd(0, TAU), anim: rnd(0, 6), losT: 0, los: false,
     horde: !!o.horde, assault: o.assault || null, chaseT: 0, aggro: false, shootCd: rnd(0, 2), alertT: 0, special: rnd(2, 6), ambient: !!o.ambient, strafe: Math.random() < .5 ? 1 : -1, name: null,
   };
-  if (def.fac === 'undead') { m.hp *= 1.5; m.dmg *= 1.25; } // moins nombreux mais plus robustes
+  if (def.fac === 'undead') { m.hp *= 1.8; m.dmg *= 1.35; m.spd *= 1.05; } // moins nombreux mais plus robustes
   m.maxhp = m.hp;
   if (o.hpMul) { m.hp *= o.hpMul; m.maxhp = m.hp; }
   G.mobs.push(m); return m;

@@ -33,6 +33,7 @@ function drawHUD(c, time) {
   if (P.veh) drawVehGauge(c, W, H);
   drawBanner(c, W, H);
   c.restore();
+  drawCombo(c, W, time);
   drawCrosshair(c, time);
   // fondus
   const sf = G.sleeping ? 1 - clamp(G.sleepFade, 0, 1) : (G.wakeFade > 0 ? G.wakeFade : 0);
@@ -136,6 +137,7 @@ function drawHotbar(c, W, H, time) {
     c.fillStyle = sel ? '#ffd890' : '#8a949e'; c.font = 'bold 10px sans-serif'; c.textAlign = 'left'; c.fillText(String(i + 1), x + 5, y0 + 12);
     if (w) {
       const b = WEAPONS[w.id]; c.font = '26px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(b.i, x + bw / 2, y0 + 33);
+      { const d = durOf(w); if (d < 100) { const col = d > 50 ? '#8ad08a' : d > 25 ? '#e8b850' : (Math.sin(time * 9) > 0 ? '#ff6a5a' : '#a03a30'); c.fillStyle = 'rgba(0,0,0,.45)'; c.fillRect(x + 4, y0 + 3, 3, 40); c.fillStyle = col; c.fillRect(x + 4, y0 + 3 + 40 * (1 - d / 100), 3, 40 * d / 100); } }
       if (!b.melee) {
         const s = wstat(w), res = ammoReserve(w), low = w.mag === 0 || w.mag <= s.mag * .25;
         c.fillStyle = 'rgba(255,255,255,.14)'; rrect(c, x + 6, y0 + 38, bw - 12, 4, 2); c.fill(); c.fillStyle = low ? (Math.sin(time * 10) > 0 || w.mag > 0 ? '#ff6a5a' : '#fff') : '#ffd86a'; rrect(c, x + 6, y0 + 38, Math.max(2, (bw - 12) * w.mag / s.mag), 4, 2); c.fill();
@@ -221,6 +223,13 @@ function drawBanner(c, W, H) {
 }
 
 // ----- viseur -----
+function drawCombo(c, W, time) {
+  if (!(G.combo >= 2) || G.comboT <= 0 || G.paused) return;
+  const pop = 1 + Math.max(0, G.comboPop || 0) * 1.6, u = clamp(G.comboT / 4.5, 0, 1), x = W / 2, y = 112;
+  c.save(); c.translate(x, y); c.scale(pop, pop); c.globalAlpha = Math.min(1, u * 3);
+  c.font = 'bold 20px sans-serif'; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,.7)'; const t = 'SÉRIE x' + G.combo; c.strokeText(t, 0, 0); c.fillStyle = G.combo >= 10 ? '#ff9a5a' : '#ffd86a'; c.fillText(t, 0, 0);
+  c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(-40, 7, 80, 4); c.fillStyle = c.fillStyle = G.combo >= 10 ? '#ff9a5a' : '#ffd86a'; c.fillRect(-40, 7, 80 * u, 4); c.restore();
+}
 function drawCrosshair(c, time) {
   if (G.paused || P.dead) return;
   const mx = G.mouse.sx, my = G.mouse.sy, w = curWeapon(); let r = 9;
@@ -236,6 +245,8 @@ function drawCrosshair(c, time) {
     const s = wstat(w), u = w.mag / s.mag; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.arc(mx, my, r + 13, 0, TAU); c.stroke();
     if (P.reloading) { c.strokeStyle = '#ffd86a'; c.beginPath(); c.arc(mx, my, r + 13, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(1 - P.reload / s.rel, 0, 1)); c.stroke(); }
     else { c.strokeStyle = u < .25 ? '#ff6a5a' : 'rgba(255,255,255,.75)'; c.beginPath(); c.arc(mx, my, r + 13, -Math.PI / 2, -Math.PI / 2 + TAU * u); c.stroke(); }
+    { const hint = !P.reloading && s && w.mag <= Math.max(1, s.mag * .2) && ammoReserve(w) > 0 ? '[R] recharger' : (!P.reloading && w.mag === 0 && ammoReserve(w) === 0 ? 'plus de munitions' : (durOf(w) < 25 ? '⚠ arme usée' : ''));
+      if (hint) { c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.75)'; c.strokeText(hint, mx, my + r + 32); c.fillStyle = Math.sin(time * 8) > -.3 ? '#ffd86a' : '#fff'; c.fillText(hint, mx, my + r + 32); } }
     c.font = 'bold 11px sans-serif'; c.textAlign = 'left'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.7)'; const tx = w.mag + (ammoReserve(w) ? ' / ' + ammoReserve(w) : ''); c.strokeText(tx, mx + r + 20, my + 4); c.fillStyle = w.mag === 0 ? '#ff6a5a' : '#fff'; c.fillText(tx, mx + r + 20, my + 4);
   }
   if (hm && hm.t > 0) { const k = hm.t / .18, sz = 7 + (1 - k) * 4; c.strokeStyle = hm.kill ? '#ff5a4a' : '#fff'; c.lineWidth = hm.kill ? 3 : 2; c.globalAlpha = clamp(k * 1.5, 0, 1); c.beginPath(); for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { c.moveTo(mx + dx * (r + 3), my + dy * (r + 3)); c.lineTo(mx + dx * (r + sz), my + dy * (r + sz)); } c.stroke(); }

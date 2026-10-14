@@ -56,7 +56,8 @@ function updatePlayer(dt) {
 
 function fireGun(w, s) {
   if (w.mag <= 0) { startReload(); if (G.edgeT > 0) SFX.play('click'); return; }
-  w.mag--; P.cd = s.rate; G.edgeT = 0;
+  { const d = durOf(w); if (d < 25 && Math.random() < .09 * (1 - d / 25)) { P.cd = .8; G.edgeT = 0; SFX.play('click'); addText(P.x, P.y - 30, 'ENRAYÉ !', '#ff9a6a', true); shake(1); return; } }
+  w.mag--; P.cd = s.rate; G.edgeT = 0; wearGear(w, s.flame ? .1 : (s.pellets ? .45 : .28));
   const spread = s.spr + P.bloom + (P.moving ? s.spr * .5 : 0) * (G.rmb ? 0 : 1) - (G.rmb ? s.spr * .3 : 0);
   const n = s.pellets || 1;
   for (let i = 0; i < n; i++) {
@@ -111,7 +112,7 @@ function meleeSwing(w, s) {
     const o = nearestHarvestable(P.x + Math.cos(P.ang) * 26, P.y + Math.sin(P.ang) * 26, s.range + 16, true);
     if (o) { harvestHit(o, WEAPONS[w.id]); hitAny = true; }
   }
-  if (hitAny) shake(1.5);
+  if (hitAny) { shake(1.5); wearGear(w, .45); }
   makeNoise(P.x, P.y, s.noise, true);
 }
 
