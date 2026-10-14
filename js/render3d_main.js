@@ -33,6 +33,7 @@ function r3lights(time) {
   const storm = 1 - I * (G.wType === 'storm' ? .55 : G.wType === 'rain' ? .35 : 0);
   sun.intensity = (d > .55 ? .55 : (.3 + .8 * day)) * storm; R3.hemi.intensity = .55 + .3 * day; R3.hemi.color.set(m3Hex('#dfeaff', '#7a8ec8', d)); R3.hemi.groundColor.set(m3Hex('#6a6040', '#2a3450', d));
   if (G.flash > 0) { R3.hemi.intensity += G.flash * 1.4; sun.intensity += G.flash * .5; }
+  { const lit = clamp((G.dark - .25) * 2.2, 0, 1); R3.mats.win.color.setRGB(.38 + lit * .62, .5 + lit * .32, .62 - lit * .22); }
   R3.fx.pts.material.uniforms.uScale.value = R3.fx.add.material.uniforms.uScale.value = R3.renderer.domElement.height / (2 * Math.tan(R3.cam.fov * Math.PI / 360));
 }
 function r3pointLights(time) {
@@ -72,70 +73,46 @@ function render3(time) {
   const sh = G.shake, ox = sh ? rnd(-sh, sh) : 0, oy = sh ? rnd(-sh, sh) : 0;
   const cx = Math.round(G.cam.x), cy = Math.round(G.cam.y); G.camX = cx; G.camY = cy;
   const tpx = cx + VW / 2, tpy = cy + VH / 2, tgy = r3ground(tpx, tpy); R3.tx = tpx / TS; R3.tz = tpy / TS; R3.camGy = R3.camInit ? R3.camGy + (tgy - R3.camGy) * Math.min(1, dt * 4) : tgy; R3.camInit = true; R3.ty = R3.camGy;
-  const pitch = 66 * Math.PI / 180, D = 1.62 * VH / TS * .92 * (R3.zoom || 1);
+  const pitch = 66 * Math.PI / 180, D = 1.62 * VH / TS * .92 * (R3.zoom = R3.zoom || SET.zoom3d || 1.12);
   R3.cam.position.set(R3.tx + ox / TS * .5, R3.ty + D * Math.sin(pitch) + oy / TS * .5, R3.tz + D * Math.cos(pitch)); R3.cam.lookAt(R3.tx, R3.ty, R3.tz); R3.cam.updateMatrixWorld(); R3.camReady = true;
   if (R3.cam.aspect !== VW / VH) { R3.cam.aspect = VW / VH; R3.cam.updateProjectionMatrix(); r3resize(); }
+  // résolution adaptative : on baisse la définition si la machine peine, on la remonte si elle a de la marge
+  { const raw = (R3.rawT ? performance.now() - R3.rawT : 16); R3.rawT = performance.now(); R3.ema = (R3.ema || 16) * .96 + Math.min(raw, 100) * .04; R3.res = R3.res || Math.min(window.devicePixelRatio || 1, SET.quality > 0 ? 1.5 : 1); R3.resMax = Math.min(window.devicePixelRatio || 1, SET.quality > 0 ? 1.5 : 1);
+    if (!window.__noAdapt && fr % 40 === 0) { let nr = R3.res; if (R3.ema > 27 && nr > .6) nr = Math.max(.6, nr * .85); else if (R3.ema < 15 && nr < R3.resMax) nr = Math.min(R3.resMax, nr / .92); if (Math.abs(nr - R3.res) > .01) { R3.res = nr; R3.renderer.setPixelRatio(nr); R3.renderer.setSize(VW, VH, false); } } }
+  if (!R3.warm) { R3.warm = [...new Set(Object.values(POITYPES).map(d => d.icon).concat(['🏠']))]; }
+  if (R3.warm.length && fr % 3 === 0) iconTex(R3.warm.pop());
   const vr = r3viewRect();
   r3lights(time);
   // --- chunks (flux) ---
   const ccx0 = Math.floor(vr.x0 / CHK), ccx1 = Math.floor(vr.x1 / CHK), ccy0 = Math.floor(vr.y0 / CHK), ccy1 = Math.floor(vr.y1 / CHK), need = [];
   for (let y = ccy0; y <= ccy1; y++) for (let x = ccx0; x <= ccx1; x++) { const k = y * 1000 + x; if (!R3.chunks.has(k)) need.push([k, x, y, Math.hypot((x + .5) * CHK - R3.tx, (y + .5) * CHK - R3.tz)]); }
-  need.sort((a, b) => a[3] - b[3]); let budget = R3.chunks.size < 6 ? 14 : 3;
-  for (const [k, x, y] of need) { if (budget-- <= 0) break; R3.chunks.set(k, r3buildChunk(x, y)); R3.stats.built++; }
+  need.sort((a, b) => a[3] - b[3]); const bt0 = performance.now(), bmax = R3.chunks.size < 6 ? 80 : 5; let roofBudget = R3.chunks.size < 6 ? 30 : 2; // budget de temps : pas de saccade
+  for (const [k, x, y] of need) { if (R3.stats.built >= 1 && performance.now() - bt0 > bmax) break; R3.chunks.set(k, r3buildChunk(x, y)); R3.stats.built++; }
   for (const [k, ch] of R3.chunks) { const vis = ch.cx >= ccx0 - 1 && ch.cx <= ccx1 + 1 && ch.cy >= ccy0 - 1 && ch.cy <= ccy1 + 1; if (!vis) { r3freeChunk(ch); R3.chunks.delete(k); } else { const inV = ch.cx >= ccx0 && ch.cx <= ccx1 && ch.cy >= ccy0 && ch.cy <= ccy1; ch.mesh.visible = inV; if (ch.water) ch.water.visible = inV; if (inV) R3.stats.chunks++; } }
   // --- bâtiments : toits (fondu à l'entrée) ---
   const px = P.x, py = P.y; let insideB = -1;
   for (let n = 0; n < G.buildings.length; n++) { const b = G.buildings[n]; if (px > b.x * TS && px < (b.x + b.w) * TS && py > b.y * TS && py < (b.y + b.h) * TS) { insideB = n; break; } }
   G.buildings.forEach((b, n) => {
     if (b.x + b.w < vr.x0 || b.x > vr.x1 || b.y + b.h < vr.y0 || b.y > vr.y1) { const m = R3.roofs.get(n); if (m) { m.visible = false; if (m.userData.extra) m.userData.extra.visible = false; } return; }
+    if (!R3.roofs.has(n)) { if (roofBudget-- <= 0) return; }
     const m = r3roof(b, n), target = n === insideB ? 0 : 1; b.a += (target - b.a) * .16; if (Math.abs(b.a - target) < .02) b.a = target;
     m.material.opacity = b.a; m.visible = b.a > .03; m.material.depthWrite = b.a > .9; if (m.userData.extra) m.userData.extra.visible = true; m.userData.used = fr; R3.stats.roofs++;
   });
   if (R3.roofs.size > 140) for (const [n, m] of R3.roofs) if ((m.userData.used || 0) < fr - 600) { R3.scene.remove(m); m.geometry.dispose(); m.material.dispose(); if (m.userData.extra) R3.scene.remove(m.userData.extra); R3.roofs.delete(n); }
   const hidden = n => n >= 0 && G.buildings[n].a > .6; // occlusion : sous un toit fermé
-  // --- objets du monde ---
+  // --- objets du monde : les extérieurs sont fusionnés par chunk ; on ne traite ici que les effets et l'intérieur des bâtiments ouverts ---
   const dyn = R3.dyn || (R3.dyn = new Map());
-  for (let ty = vr.y0; ty <= vr.y1; ty++) for (let tx = vr.x0; tx <= vr.x1; tx++) {
-    const i = ty * G.W + tx, o = G.objs.get(i); if (!o) continue;
-    if (hidden(R3.bidx[i])) { R3.stats.culled++; continue; }
-    const gy = r3ground(o.x, o.y), X = o.x / TS, Z = o.y / TS, k = o.k, ry = hash2(tx, ty, 9) * TAU;
-    switch (k) {
-      case 'tree': case 'deadtree': {
-        if (o.dep) { r3setInst('stump', 0, X, gy, Z, ry, 1, 1, 1); break; } const [kind, vv] = treeKindOf(o), sc = (.86 + hash2(tx, ty, 3) * .3) * (kind === 'pine' ? 1.05 : .95);
-        const key = kind + vv; r3setInst(R3.inst[key] ? key : kind + '0', 0, X, gy, Z, ry, sc, sc, sc, .88 + hash2(tx, ty, 4) * .22); break;
-      }
-      case 'rock': r3setInst(o.dep ? 'rockDep' : 'rock', 0, X, gy, Z, ry, .8 + o.v * .5, .8 + o.v * .6, .8 + o.v * .5, .9 + hash2(tx, ty, 5) * .2); break;
-      case 'bush': r3setInst(o.dep ? 'bushEmpty' : 'bush', 0, X, gy, Z, ry, 1, 1, 1, .92 + hash2(tx, ty, 5) * .16); break;
-      case 'herb': r3setInst('herb', 0, X, gy, Z, ry, 1, 1, 1); break;
-      case 'scrappile': if (!o.dep) r3setInst('scrap', 0, X, gy, Z, ry, 1, 1, 1); break;
-      case 'wreck': r3setInst(o.dep ? 'wreckDep' : 'wreck' + Math.floor(o.v * 4), 0, X, gy, Z, -(o.ang || 0), 1, 1, 1); break;
-      case 'crate': r3setInst(o.air ? 'crateAir' : o.opened ? 'crateOpen' : 'crate', 0, X, gy, Z, 0, 1, 1, 1); if (!o.opened) r3part(X, gy + .8 + Math.sin(time * 4 + tx) * .05, Z, .5, RGB_.glow, .55, true); break;
-      case 'mast': r3setInst('mast', 0, X, gy, Z, 0, 1, 1, 1); r3part(X, gy + 4.05, Z, .5, G.radioOn ? (Math.sin(time * 6) > 0 ? [.3, 1, .3] : [.1, .5, .1]) : [1, .2, .2], .9, true); break;
-      case 'radbarrel': r3setInst('radbarrel', 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'furn': r3setInst('furn#' + (o.fv || 0), 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'tent': r3setInst('tent#' + Math.floor(o.v * 3), 0, X, gy, Z, ry * .2, 1, 1, 1); break;
-      case 'sandbag': r3setInst('sandbag', 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'stall': r3setInst('stall', 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'pew': r3setInst('pew#' + (o.fv || 0), 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'altar': r3setInst('altar', 0, X, gy, Z, 0, 1, 1, 1); R3.lightSrc.push({ x: X, y: gy + 1.2, z: Z, c: '#ffc060', k: .5, r: 7, d: (X - R3.tx) ** 2 + (Z - R3.tz) ** 2 }); break;
-      case 'desk': r3setInst('desk#' + (o.fv || 0), 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'counter': r3setInst('counter', 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'labtable': r3setInst('labtable', 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'tank': r3setInst('tank', 0, X, gy, Z, 0, 1, 1, 1); r3part(X, gy + .7, Z, .8, [.2, 1, .5], .1 + Math.sin(time * 2 + tx) * .04, true); break;
-      case 'grave': r3setInst('grave#' + (o.gv || 0), 0, X, gy, Z, hash2(tx, ty, 6) * .3 - .15, 1, 1, 1); break;
-      case 'egg': { const pu = 1 + Math.sin(time * 2.2 + tx * 1.7) * .05; r3setInst('egg', 0, X, gy, Z, ry, pu, pu * 1.1, pu); break; }
-      case 'tower': r3setInst('tower', 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'rails': r3setInst('rails', 0, X, gy, Z, 0, 1, 1, 1); break;
-      case 'ore': r3setInst(o.dep ? 'orDep' : 'ore', 0, X, gy, Z, ry, 1, 1, 1); break;
-      case 'pylon': { r3setInst('pylon', 0, X, gy, Z, 0, 1, 1, 1); const ph = Math.sin(time * 9 + tx * 3); if (ph > .55) { r3part(X, gy + 3.0, Z, 1.4, [.5, .9, 1], .8, true); R3.lightSrc.push({ x: X, y: gy + 3, z: Z, c: '#80e0ff', k: 1.4, r: 9, d: (X - R3.tx) ** 2 + (Z - R3.tz) ** 2 }); } break; }
-      case 'screen': r3setInst('screen', 0, X, gy, Z, 0, 1, 1, 1); if (G.dark > .1) R3.lightSrc.push({ x: X, y: gy + 1.8, z: Z + 2, c: '#9abfff', k: .9 * (.6 + Math.abs(Math.sin(time * 3.1) * Math.sin(time * 7.3))), r: 12, d: (X - R3.tx) ** 2 + (Z - R3.tz) ** 2 }); break;
-      case 'plane': r3setInst('plane', 0, o.px / TS + .9, r3ground(o.px, o.py), o.py / TS, 0, 1, 1, 1); r3part(o.px / TS + 1.6, gy + 1.2, o.py / TS, .7, RGB_.fire, .5 + Math.sin(time * 7) * .15, true); break;
-      case 'fire': r3fire(X, gy, Z, time, 1, tx); break;
-      case 'ferris': case 'carousel': { let e = dyn.get(i); if (!e) { e = r3dynMake(k); R3.scene.add(e); dyn.set(i, e); } e.visible = true; e.position.set(X, gy, Z); r3dynAnim(e, k, time); e.userData.seen = fr; if (k === 'ferris' && G.dark > .15) for (let q = 0; q < 12; q++) { const a = time * .22 + q * TAU / 12; r3part(X + Math.cos(a) * 1.9, gy + 2.5 + Math.sin(a) * 1.9, Z + .35, .3, [[1, .35, .35], [1, .85, .35], [.45, .75, 1]][q % 3], .7 * G.dark, true); } break; }
-      case 'planepart': case 'screenpart': break;
-      default: r3setInst('fallback', 0, X, gy, Z, 0, 1, 1, 1);
+  for (const ch of R3.chunks.values()) {
+    if (!ch.mesh.visible) continue;
+    if ((fr + ch.cx * 7 + ch.cy * 3) % 12 === 0) { let sig = 0; const x0 = ch.cx * CHK, y0 = ch.cy * CHK, x1 = Math.min(G.W, x0 + CHK), y1 = Math.min(G.H, y0 + CHK); for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) { const o = G.objs.get(ty * G.W + tx); if (o) sig = (sig * 31 + (o.dep ? 7 : 1) + (o.opened ? 13 : 0)) | 0; } if (sig !== ch.sig) r3bakeObjs(ch); }
+    if (ch.objMesh) ch.objMesh.visible = true; R3.stats.baked = (R3.stats.baked || 0);
+    for (const [o, tx, ty] of ch.fx) r3objFx(o, tx, ty, time, dyn, fr);
+    for (const [o, tx, ty] of ch.inter) {
+      if (hidden(R3.bidx[ty * G.W + tx])) { R3.stats.culled++; continue; }
+      const sp = r3objSpec(o, tx, ty); if (sp) r3setInst(sp.key, 0, sp.x, sp.y, sp.z, sp.ry, sp.sx, sp.sy, sp.sz, sp.tint); if (R3.FX_KINDS[o.k]) r3objFx(o, tx, ty, time, dyn, fr);
     }
   }
+  for (const ch of R3.chunks.values()) if (ch.objMesh) ch.objMesh.visible = ch.mesh.visible;
   for (const [i, e] of dyn) if (e.userData.seen !== fr) e.visible = false;
   for (const k in R3.inst) { const im = R3.inst[k]; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
   // --- entités, structures, effets ---
@@ -152,9 +129,47 @@ function render3(time) {
   r3overlay(c, time, vr);
   drawWeather(c, time);
   drawHUD(c, time);
-  if (R3.showStats) { c.font = '11px monospace'; c.fillStyle = '#9fe8ff'; c.textAlign = 'left'; c.fillText('3D  tris ' + R3.stats.tris + '  appels ' + R3.stats.calls + '  chunks ' + R3.stats.chunks + '/' + R3.chunks.size + ' (+' + R3.stats.built + ')  instances ' + R3.stats.inst + '  masqués ' + R3.stats.culled + '  entités ' + R3.ents.size, 12, VH - 24); }
+  if (R3.showStats) { c.font = '11px monospace'; c.fillStyle = '#9fe8ff'; c.textAlign = 'left'; c.fillText('3D  tris ' + R3.stats.tris + '  zoom ' + (R3.zoom || 1).toFixed(2) + '  rés ' + (R3.res || 1).toFixed(2) + '  fps~' + Math.round(1000 / (R3.ema || 16)) + '  appels ' + R3.stats.calls + '  chunks ' + R3.stats.chunks + '/' + R3.chunks.size + ' (+' + R3.stats.built + ')  instances ' + R3.stats.inst + '  masqués ' + R3.stats.culled + '  entités ' + R3.ents.size, 12, VH - 24); }
 }
 
+R3.FX_KINDS = { crate: 1, mast: 1, tank: 1, pylon: 1, screen: 1, plane: 1, fire: 1, ferris: 1, carousel: 1, altar: 1 };
+function r3objSpec(o, tx, ty) { // géométrie statique d'un objet (null si rien à dessiner)
+  const gy = r3ground(o.x, o.y), X = o.x / TS, Z = o.y / TS, k = o.k, ry = hash2(tx, ty, 9) * TAU, S = (key, ry2, sx, sy, sz, tint) => ({ key, x: X, y: gy, z: Z, ry: ry2, sx: sx || 1, sy: sy || 1, sz: sz || 1, tint });
+  switch (k) {
+    case 'tree': case 'deadtree': { if (o.dep) return S('stump', ry); const [kind, vv] = treeKindOf(o), sc = (.86 + hash2(tx, ty, 3) * .3) * (kind === 'pine' ? 1.05 : .95); const key = kind + vv; return S(R3.geo[key] ? key : kind + '0', ry, sc, sc, sc, .88 + hash2(tx, ty, 4) * .22); }
+    case 'rock': return S(o.dep ? 'rockDep' : 'rock', ry, .8 + o.v * .5, .8 + o.v * .6, .8 + o.v * .5, .9 + hash2(tx, ty, 5) * .2);
+    case 'bush': return S(o.dep ? 'bushEmpty' : 'bush', ry, 1, 1, 1, .92 + hash2(tx, ty, 5) * .16);
+    case 'herb': return S('herb', ry);
+    case 'scrappile': return o.dep ? null : S('scrap', ry);
+    case 'wreck': return S(o.dep ? 'wreckDep' : 'wreck' + Math.floor(o.v * 4), -(o.ang || 0));
+    case 'crate': return S(o.air ? 'crateAir' : o.opened ? 'crateOpen' : 'crate', 0);
+    case 'mast': case 'radbarrel': case 'sandbag': case 'stall': case 'altar': case 'counter': case 'labtable': case 'tank': case 'tower': case 'rails': case 'pylon': case 'screen': return S(k, 0);
+    case 'furn': return S('furn#' + (o.fv || 0), 0);
+    case 'tent': return S('tent#' + Math.floor(o.v * 3), ry * .2);
+    case 'pew': return S('pew#' + (o.fv || 0), 0);
+    case 'desk': return S('desk#' + (o.fv || 0), 0);
+    case 'grave': return S('grave#' + (o.gv || 0), hash2(tx, ty, 6) * .3 - .15);
+    case 'egg': return S('egg', ry);
+    case 'ore': return S(o.dep ? 'orDep' : 'ore', ry);
+    case 'plane': return { key: 'plane', x: o.px / TS + .9, y: r3ground(o.px, o.py), z: o.py / TS, ry: 0, sx: 1, sy: 1, sz: 1 };
+    case 'fire': case 'ferris': case 'carousel': case 'planepart': case 'screenpart': return null;
+    default: return S('fallback', 0);
+  }
+}
+function r3objFx(o, tx, ty, time, dyn, fr) { // effets animés (lumières, étincelles, grande roue…)
+  const gy = r3ground(o.x, o.y), X = o.x / TS, Z = o.y / TS, d2 = (X - R3.tx) ** 2 + (Z - R3.tz) ** 2;
+  switch (o.k) {
+    case 'crate': if (!o.opened) r3part(X, gy + .8 + Math.sin(time * 4 + tx) * .05, Z, .5, RGB_.glow, .55, true); break;
+    case 'mast': r3part(X, gy + 4.05, Z, .5, G.radioOn ? (Math.sin(time * 6) > 0 ? [.3, 1, .3] : [.1, .5, .1]) : [1, .2, .2], .9, true); break;
+    case 'altar': R3.lightSrc.push({ x: X, y: gy + 1.2, z: Z, c: '#ffc060', k: .5, r: 7, d: d2 }); break;
+    case 'tank': r3part(X, gy + .7, Z, .8, [.2, 1, .5], .1 + Math.sin(time * 2 + tx) * .04, true); break;
+    case 'pylon': if (Math.sin(time * 9 + tx * 3) > .55) { r3part(X, gy + 3.0, Z, 1.4, [.5, .9, 1], .8, true); R3.lightSrc.push({ x: X, y: gy + 3, z: Z, c: '#80e0ff', k: 1.4, r: 9, d: d2 }); } break;
+    case 'screen': if (G.dark > .1) R3.lightSrc.push({ x: X, y: gy + 1.8, z: Z + 2, c: '#9abfff', k: .9 * (.6 + Math.abs(Math.sin(time * 3.1) * Math.sin(time * 7.3))), r: 12, d: d2 }); break;
+    case 'plane': r3part(o.px / TS + 1.6, gy + 1.2, o.py / TS, .7, RGB_.fire, .5 + Math.sin(time * 7) * .15, true); break;
+    case 'fire': r3fire(X, gy, Z, time, 1, tx); break;
+    case 'ferris': case 'carousel': { const i = ty * G.W + tx; let e = dyn.get(i); if (!e) { e = r3dynMake(o.k); R3.scene.add(e); dyn.set(i, e); } e.visible = true; e.position.set(X, gy, Z); r3dynAnim(e, o.k, time); e.userData.seen = fr; if (o.k === 'ferris' && G.dark > .15) for (let q = 0; q < 12; q++) { const a = time * .22 + q * TAU / 12; r3part(X + Math.cos(a) * 1.9, gy + 2.5 + Math.sin(a) * 1.9, Z + .35, .3, [[1, .35, .35], [1, .85, .35], [.45, .75, 1]][q % 3], .7 * G.dark, true); } break; }
+  }
+}
 function r3fire(X, gy, Z, time, sc, seed) {
   for (let q = 0; q < 3; q++) { const a = Math.random() * TAU, r = Math.random() * .12 * sc; r3part(X + Math.cos(a) * r, gy + .2 + Math.random() * .5 * sc, Z + Math.sin(a) * r, .38 * sc * (.6 + Math.random() * .6), RGB_.fire, .55, true); }
   r3part(X, gy + .15, Z, .6 * sc, [1, .75, .3], .25 + Math.sin(time * 14 + seed) * .08, true);
@@ -203,14 +218,14 @@ function r3entities(vr, time, dt, fr, hidden) {
   // alliés (gardes, recrues, familiers)
   for (const f of G.friends) {
     if (f.dead || !inV(f.x, f.y) || occl(f.x, f.y)) continue; const gy = r3ground(f.x, f.y);
-    const e = r3getEnt(f, () => f.kind === 'pet' ? mkQuad(Object.assign({}, ANIMAL3[f.sp] || { col: f.col, len: .9, h: .4, wid: .3, leg: .3 }, { col: f.col || '#888', k: f.r / 12 })) : mkHumanoid({ skin: '#d6a984', shirt: f.col || '#4a8a5a', pants: '#2c3a44', gun: true, hair: '#3a2a1a', helmet: f.kind === 'guard' ? '#4a5a3a' : null })), g = e.g, u = g.userData; R3.stats.ents++;
+    const e = r3getEnt(f, () => f.kind === 'pet' ? mkQuad(Object.assign({}, ANIMAL3[f.sp] || { col: f.col, len: .9, h: .4, wid: .3, leg: .3 }, { col: f.col || '#888', k: f.r / 12 })) : mkHumanoid({ skin: '#d6a984', shirt: f.col || '#4a8a5a', pants: '#2c3a44', gun: true, hair: '#3a2a1a', helmet: f.kind === 'guard' ? '#4a5a3a' : null, armband: '#ffffff', ring: '#4aff80' })), g = e.g, u = g.userData; R3.stats.ents++;
     g.position.set(f.x / TS, gy, f.y / TS); g.rotation.y = -(f.aang || 0);
     if (u.legL) r3humanAnim(u, (f.anim || 0) * 1.6, .8, true, false); if (u.legs) u.legs.forEach((l, i) => l.rotation.z = Math.sin((f.anim || 0) * 1.8 + (i % 2 ? 0 : Math.PI)) * .6);
     if (u.bodyMat) r3flash(u.bodyMat, f.hitT > 0, false, false);
   }
   // PNJ
   for (const n of G.npcs) {
-    if (!inV(n.x, n.y)) continue; const e = r3getEnt(n, () => mkHumanoid({ skin: '#d6a984', shirt: n.col || '#8a6a4a', pants: '#3a3a44', hair: '#4a3020', scale: 1 })), gy = r3ground(n.x, n.y); R3.stats.ents++;
+    if (!inV(n.x, n.y)) continue; const e = r3getEnt(n, () => mkHumanoid({ skin: '#d6a984', shirt: n.col || '#8a6a4a', pants: '#3a3a44', hair: '#4a3020', scale: 1, ring: '#ffd24a' })), gy = r3ground(n.x, n.y); R3.stats.ents++;
     e.g.position.set(n.x / TS, gy, n.y / TS); e.g.rotation.y = -(Math.atan2(P.y - n.y, P.x - n.x)); r3humanAnim(e.g.userData, 0, 0, false, false);
   }
   // véhicules
@@ -293,6 +308,7 @@ function r3effects(vr, time, dt, fr, hidden) {
     if (!e) { e = new THREE.Group(); e.add(bmesh(GEO().cyl, lam('#3a3a40'), 0, .9, 0, .07, 1.8, .07)); const cl = new THREE.Mesh(new THREE.PlaneGeometry(.9, .55), new THREE.MeshLambertMaterial({ color: '#8a2a2a', side: THREE.DoubleSide })); cl.position.set(.45, 1.5, 0); cl.castShadow = true; e.add(cl); e.userData.cloth = cl; R3.scene.add(e); F.pois.set(p, e); }
     e.visible = true; e.position.set(fx / TS, r3ground(fx, fy), fy / TS); const cl = e.userData.cloth; cl.material.color.set(p.owned ? '#3a9a4a' : (p.cleared ? '#d0d0d0' : '#8a2a2a')); cl.rotation.y = Math.sin(time * 3 + fx) * .35; cl.rotation.z = Math.sin(time * 4 + fx) * .08;
   }
+  r3banners(time, inR);
   if (!F.dec) { const gd = new THREE.CircleGeometry(1, 10); gd.rotateX(-Math.PI / 2); F.dec = new THREE.InstancedMesh(gd, new THREE.MeshBasicMaterial({ transparent: true, opacity: .62, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), 500); F.dec.count = 0; F.dec.frustumCulled = false; F.dec.renderOrder = 1; R3.scene.add(F.dec); }
   let nd = 0; for (const d of G.decals) { if (nd >= 500 || !inR(d.x, d.y)) continue; const gy = r3ground(d.x, d.y) + .04; R3.q.setFromAxisAngle(R3.vec.set(0, 1, 0), -(d.ang || 0)); R3.p.set(d.x / TS, gy, d.y / TS); const r = d.r / TS; R3.s.set(r * (d.corpse ? 1.2 : 1), 1, r * (d.corpse ? .6 : 1)); R3.m4.compose(R3.p, R3.q, R3.s); F.dec.setMatrixAt(nd, R3.m4); R3.tintC.set(d.corpse ? (d.human ? '#3a3a40' : '#3a4a32') : d.col); F.dec.setColorAt(nd, R3.tintC); nd++; }
   F.dec.count = nd; F.dec.instanceMatrix.needsUpdate = true; if (F.dec.instanceColor) F.dec.instanceColor.needsUpdate = true;
@@ -330,7 +346,42 @@ function r3overlay(c, time, vr) {
     if (o.owned) { const s = r3proj(o.flag.x, o.flag.y, 2.05); if (s) { const u = clamp(o.hpFlag / BASE_LEVELS[o.lvl].hp, 0, 1); c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(s[0] - 18, s[1], 36, 4); c.fillStyle = u > .4 ? '#6c6' : '#e55'; c.fillRect(s[0] - 17, s[1] + 1, 34 * u, 2); } }
     else if (o.cleared && dist(o.flag.x, o.flag.y, P.x, P.y) < 300) { const s = r3proj(o.flag.x, o.flag.y, 2.1); if (s) { c.fillStyle = 'rgba(120,255,160,.9)'; c.font = 'bold 11px sans-serif'; c.fillText('Libre', s[0], s[1]); } }
   }
+  // étiquettes des lieux (fonction + faction) : on comprend ce qu'est chaque bâtiment
+  { const cand = []; for (const o of G.pois) { if (o.hidden) continue; const bx = o.b ? (o.b.x + o.b.w / 2) * TS : o.cx, by = o.b ? (o.b.y + o.b.h / 2) * TS : o.cy; const d = dist(bx, by, P.x, P.y), small = o.type === 'house' || o.type === 'cabin'; if (d > (small ? 480 : 1300) || !near(bx, by)) continue; if (!o.discovered && d > 380) continue; cand.push([d, o, bx, by]); }
+    cand.sort((a, b) => a[0] - b[0]); const drawn = [];
+    for (const [d, o, bx, by] of cand) {
+      if (drawn.length >= 9) break; const hh = o.b ? WALL_H + 2.6 : 3.4, s = r3proj(bx, by, hh); if (!s) continue;
+      const fr_ = { camp: 'Chacals', legion: 'Légion', village: 'Fort', nomads: 'Nomades', hive: 'Infectés', crash: '', prison: '' }[o.type], hostile = o.type === 'camp' || o.type === 'legion' || o.type === 'hive', friendly = o.type === 'village' || o.type === 'nomads';
+      const state = o.owned ? ' ✔' : (o.cleared && o.def.claim ? ' 🚩' : ''), txt = (o.def.icon || '') + ' ' + (o.def.n || o.name) + state;
+      c.font = 'bold 12px sans-serif'; const w = c.measureText(txt).width + 16, x = s[0] - w / 2, y = s[1] - 10; if (drawn.some(r => x < r[0] + r[2] && x + w > r[0] && y < r[1] + 20 && y + 20 > r[1])) continue; drawn.push([x, y, w]);
+      c.globalAlpha = clamp(1.4 - d / 1000, .45, 1); c.fillStyle = hostile ? 'rgba(90,16,16,.78)' : friendly || o.owned ? 'rgba(16,70,36,.78)' : 'rgba(10,14,20,.72)'; rrect(c, x, y, w, 20, 8); c.fill(); c.strokeStyle = hostile ? '#ff7a6a' : friendly || o.owned ? '#7aff9a' : 'rgba(255,255,255,.28)'; c.lineWidth = 1.2; c.stroke();
+      c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, s[0], y + 11); if (fr_) { c.font = 'bold 9px sans-serif'; c.fillStyle = hostile ? '#ffb0a0' : '#b8ffc8'; c.fillText(fr_, s[0], y + 28); } c.textBaseline = 'alphabetic'; c.globalAlpha = 1;
+    } c.textAlign = 'center'; }
   const tg = typeof tutTarget === 'function' ? tutTarget() : null; if (tg) { const s = r3proj(tg.x, tg.y, 1.6 + Math.sin(time * 5) * .12); if (s) { c.save(); c.translate(s[0], s[1]); c.fillStyle = '#ffd24a'; c.strokeStyle = '#000'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(0, 14); c.lineTo(-11, -2); c.lineTo(-4, -2); c.lineTo(-4, -12); c.lineTo(4, -12); c.lineTo(4, -2); c.lineTo(11, -2); c.closePath(); c.stroke(); c.fill(); c.restore(); } }
   for (const t of G.texts) { const s = r3proj(t.x, t.y, 1.4); if (!s) continue; c.globalAlpha = clamp(t.life * 2, 0, 1); label(s, t.txt, t.col, (t.big ? 'bold 18px' : 'bold 12px') + ' sans-serif'); }
   c.globalAlpha = 1;
+}
+
+// ----- bannières des factions : repérables de loin -----
+const _bt = {};
+function bannerTex(kind) {
+  if (_bt[kind]) return _bt[kind]; const spec = { camp: ['#6a1410', '#e8d0b0', '☠️'], legion: ['#15151c', '#c01a40', '⚔️'], village: ['#1f6a3a', '#f0e8c8', '🏘️'], nomads: ['#a8602a', '#f4e0b0', '⛺'] }[kind];
+  const cv = document.createElement('canvas'); cv.width = 96; cv.height = 144; const c = cv.getContext('2d'); c.fillStyle = spec[0]; c.fillRect(0, 0, 96, 144); c.strokeStyle = spec[1]; c.lineWidth = 6; c.strokeRect(5, 5, 86, 134);
+  c.beginPath(); c.moveTo(0, 144); c.lineTo(48, 118); c.lineTo(96, 144); c.fillStyle = 'rgba(0,0,0,.35)'; c.fill();
+  c.font = '54px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(spec[2], 48, 62);
+  const t = new THREE.CanvasTexture(cv); return _bt[kind] = t;
+}
+function r3banners(time, inR) {
+  const F = R3.fx; F.ban = F.ban || new Map();
+  for (const p of G.pois) {
+    const kind = p.type === 'camp' ? 'camp' : p.type === 'legion' ? 'legion' : p.type === 'village' ? 'village' : p.type === 'nomads' ? 'nomads' : null; if (!kind) continue;
+    let arr = F.ban.get(p); const vis = inR(p.cx, p.cy, 14);
+    if (!vis) { if (arr) arr.forEach(g => g.visible = false); continue; }
+    if (!arr) {
+      arr = []; const pts = kind === 'village' ? [[p.front.x - 1.5, p.front.y - 2.2], [p.front.x - 1.5, p.front.y + 3.4], [p.x + 3, p.y + 1], [p.x + p.w - 4, p.y + 1]] : kind === 'nomads' ? [[p.x + 1.2, p.y + 1.2], [p.x + p.w - 2.2, p.y + 1.2], [p.x + p.w / 2, p.y + p.h - 1.5]] : [[p.x + 1.5, p.y + 1.5], [p.x + p.w - 2.5, p.y + 1.5], [p.x + 1.5, p.y + p.h - 2.5], [p.x + p.w - 2.5, p.y + p.h - 2.5]];
+      for (const [tx, ty] of pts) { const g = new THREE.Group(); g.add(bmesh(GEO().cyl, lam('#2a2a30'), 0, 1.8, 0, .1, 3.6, .1)); g.add(bmesh(GEO().sph, lam('#e8c050'), 0, 3.65, 0, .22, .22, .22)); const cl = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.5), new THREE.MeshLambertMaterial({ map: bannerTex(kind), side: THREE.DoubleSide, emissive: '#222222' })); cl.position.set(.55, 2.7, 0); cl.castShadow = true; g.add(cl); g.userData.cloth = cl; g.userData.pos = [tx + .5, ty + .5]; R3.scene.add(g); arr.push(g); }
+      F.ban.set(p, arr);
+    }
+    arr.forEach((g, i) => { g.visible = true; const [tx, ty] = g.userData.pos; g.position.set(tx, r3ground(tx * TS, ty * TS), ty); g.userData.cloth.rotation.y = Math.sin(time * 2.2 + i * 1.7) * .22; });
+  }
 }

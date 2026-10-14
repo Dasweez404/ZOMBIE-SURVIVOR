@@ -40,6 +40,7 @@ function onKeyDown(e) {
   if (key === 'm') { if (panelTab === 'map') closePanel(); else if (!G.paused || panelOpen()) openPanel('map'); return; }
   if (G.paused) return;
   const dm = /^(Digit|Numpad)([1-5])$/.exec(code); if (dm) { selectSlot(+dm[2] - 1); return; }
+  if (use3D() && (code === 'Equal' || code === 'NumpadAdd' || code === 'Minus' || code === 'NumpadSubtract' || key === '+' || key === '-')) { R3.zoom = clamp((R3.zoom || 1.12) + ((code === 'Equal' || code === 'NumpadAdd' || key === '+') ? -.08 : .08), .8, 1.8); SET.zoom3d = R3.zoom; saveSettings(); return; }
   if (code === 'F3') { setMode3D(!SET.mode3d); return; }
   if (code === 'F4' && use3D()) { R3.showStats = !R3.showStats; return; }
   if (code === 'Space') { if (!e.repeat) dodgeRoll(); return; }

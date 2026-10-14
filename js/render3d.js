@@ -67,8 +67,15 @@ function r3reset() {
   R3.G = G; R3.vh = new Float32Array((G.W + 1) * (G.H + 1)).fill(NaN);
   R3.bidx = new Int16Array(G.W * G.H).fill(-1);
   G.buildings.forEach((b, n) => { for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) if (inb(x, y)) R3.bidx[IDX(x, y)] = n; });
+  R3.bpoi = new Array(G.buildings.length).fill(null); // bâtiment → lieu (pour reconnaître sa fonction)
+  G.buildings.forEach((b, n) => { const cx = b.x + b.w / 2, cy = b.y + b.h / 2; for (const p of G.pois) if (cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h && p.type !== 'village') { R3.bpoi[n] = p; break; } if (!R3.bpoi[n]) for (const p of G.pois) if (p.type === 'village' && cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h) { R3.bpoi[n] = p; break; } });
+  R3.doorMap = new Map(); R3.doorsByChunk = new Map(); // entrées : tuiles de porte ('in') et paillasson ('out')
+  G.buildings.forEach((b, n) => (b.doors || []).forEach(d => {
+    const horiz = d.s < 2; for (let k = 0; k < 2; k++) { const ix = horiz ? d.x + k : d.x, iy = horiz ? d.y : d.y + k, ox = horiz ? d.fx + k : d.fx, oy = horiz ? d.fy : d.fy + k; if (inb(ix, iy)) R3.doorMap.set(IDX(ix, iy), 'in'); if (inb(ox, oy)) R3.doorMap.set(IDX(ox, oy), 'out'); }
+    const ck = Math.floor(d.y / 16) * 1000 + Math.floor(d.x / 16); (R3.doorsByChunk.get(ck) || R3.doorsByChunk.set(ck, []).get(ck)).push([n, d]);
+  }));
   for (const ch of R3.chunks.values()) r3freeChunk(ch); R3.chunks.clear();
-  for (const m of R3.roofs.values()) { R3.scene.remove(m); m.geometry.dispose(); m.material.dispose(); } R3.roofs.clear();
+  for (const m of R3.roofs.values()) r3freeRoof(m); R3.roofs.clear();
   for (const e of R3.ents.values()) r3dropEnt(e); R3.ents.clear();
   for (const e of R3.structMeshes.values()) { R3.scene.remove(e); } R3.structMeshes.clear();
 }
@@ -114,6 +121,7 @@ function r3init() {
     water: new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: .78 }),
     inst: new THREE.MeshLambertMaterial({ vertexColors: true }),
     basic: new THREE.MeshBasicMaterial({ vertexColors: true }),
+    win: new THREE.MeshBasicMaterial({ vertexColors: true }),
   };
   r3prefabs(); r3fxInit();
   R3.vec = new THREE.Vector3(); R3.ray = new THREE.Raycaster(); R3.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); R3.m4 = new THREE.Matrix4(); R3.q = new THREE.Quaternion(); R3.e = new THREE.Euler(); R3.s = new THREE.Vector3(); R3.p = new THREE.Vector3();
@@ -174,19 +182,30 @@ function r3prefabs() {
   F.flag = mergeParts([P_(g.cyl, '#3a3a40', 0, .7, 0, .06, 1.4, .06)]);
   F.fallback = mergeParts([P_(g.box, '#aa66aa', 0, .3, 0, .6, .6, .6)]);
   // matériau instancié commun, une InstancedMesh par préfabriqué
-  R3.inst = {}; R3.instCount = {};
-  for (const k in F) { const geos = Array.isArray(F[k]) ? F[k] : [F[k]]; geos.forEach((geo, i) => { const key = Array.isArray(F[k]) ? k + '#' + i : k; const im = new THREE.InstancedMesh(geo, R3.mats.inst, 1800); im.count = 0; im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(1800 * 3).fill(1), 3); im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; R3.scene.add(im); R3.inst[key] = im; }); }
+  R3.inst = {}; R3.instCount = {}; R3.geo = {};
+  for (const k in F) { const geos = Array.isArray(F[k]) ? F[k] : [F[k]]; geos.forEach((geo, i) => { const key = Array.isArray(F[k]) ? k + '#' + i : k; R3.geo[key] = geo; const im = new THREE.InstancedMesh(geo, R3.mats.inst, 1800); im.count = 0; im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(1800 * 3).fill(1), 3); im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; R3.scene.add(im); R3.inst[key] = im; }); }
 }
 
 // ---------- chunks de terrain ----------
 const CHK = 16;
-function r3freeChunk(ch) { R3.scene.remove(ch.mesh); ch.mesh.geometry.dispose(); if (ch.water) { R3.scene.remove(ch.water); ch.water.geometry.dispose(); } }
+const ACCENT = { house: '#c0392b', cabin: '#6a8a3a', gas: '#e8c030', farm: '#b8742a', market: '#2a7ac0', police: '#2a3f9a', hospital: '#e04a4a', warehouse: '#7a7e86', bunker: '#4a5a3a', church: '#7a4a9a', school: '#3a9a5a', diner: '#c03a34', firestation: '#b82a2a', lab: '#2ab8a0', prison: '#6a6a72', trailer: '#c0c4c8', mine: '#7a5a2a', radio: '#777777', village: '#2a8a4a', camp: '#8a1a14', legion: '#7a1f2a' };
+function r3freeChunk(ch) {
+  for (const k of ['mesh', 'water', 'win', 'objMesh']) if (ch[k]) { R3.scene.remove(ch[k]); ch[k].geometry.dispose(); }
+}
 function r3buildChunk(cx, cy) {
-  const pos = [], col = [], wp = [], wc = [], x0 = cx * CHK, y0 = cy * CHK, x1 = Math.min(G.W, x0 + CHK), y1 = Math.min(G.H, y0 + CHK);
-  const tri = (a, b, c, hex, j) => { const cc = C3(hex); const k = 1 + j; for (const p of [a, b, c]) { pos.push(p[0], p[1], p[2]); col.push(cc.r * k, cc.g * k, cc.b * k); } };
+  const pos = [], col = [], wp = [], wc = [], wnp = [], wnc = [], x0 = cx * CHK, y0 = cy * CHK, x1 = Math.min(G.W, x0 + CHK), y1 = Math.min(G.H, y0 + CHK);
+  const tri = (a, b, c, hex, j) => { const cc = C3(hex); const k = 1 + (j || 0); for (const p of [a, b, c]) { pos.push(p[0], p[1], p[2]); col.push(cc.r * k, cc.g * k, cc.b * k); } };
+  const q = (p0, p1, p2, p3, hx) => { tri(p0, p1, p2, hx, 0); tri(p0, p2, p3, hx, 0); };
+  const qUp = (p0, p1, p2, p3, hx) => { const ny = (p1[2] - p0[2]) * (p2[0] - p0[0]) - (p1[0] - p0[0]) * (p2[2] - p0[2]); if (ny < 0) q(p0, p3, p2, p1, hx); else q(p0, p1, p2, p3, hx); };
+  const wq = (p0, p1, p2, p3, hx) => { const cc = C3(hx); for (const p of [p0, p1, p2, p0, p2, p3]) { wnp.push(p[0], p[1], p[2]); wnc.push(cc.r, cc.g, cc.b); } };
+  const box = (ax, ay, az, bx, by, bz, hx, hx2) => { // parallélépipède (5 faces)
+    q([ax, by, az], [ax, by, bz], [bx, by, bz], [bx, by, az], hx2 || hx); q([ax, ay, bz], [bx, ay, bz], [bx, by, bz], [ax, by, bz], hx); q([bx, ay, az], [ax, ay, az], [ax, by, az], [bx, by, az], m3Hex(hx, '#000000', .25));
+    q([ax, ay, az], [ax, ay, bz], [ax, by, bz], [ax, by, az], m3Hex(hx, '#000000', .15)); q([bx, ay, bz], [bx, ay, az], [bx, by, az], [bx, by, bz], m3Hex(hx, '#000000', .1));
+  };
   const WALLC = ['#6a6a72', '#62626a', '#70707a'];
+  const isWall = (a, b) => { if (!inb(a, b)) return false; const tt = G.tiles[IDX(a, b)]; return tt === T.WALLT || tt === T.PALI; };
   for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
-    const i = IDX(tx, ty); let t = G.tiles[i]; const h = hash2(tx, ty, 77);
+    const i = IDX(tx, ty); let t = G.tiles[i]; const h = hash2(tx, ty, 77), dm = R3.doorMap.get(i);
     const h00 = r3vh(tx, ty), h10 = r3vh(tx + 1, ty), h01 = r3vh(tx, ty + 1), h11 = r3vh(tx + 1, ty + 1);
     let hex;
     if (t === T.WALLT || t === T.PALI) hex = G.tiles[i] === T.PALI ? '#7a6a4a' : '#5a5c60'; // sol sous les murs
@@ -195,32 +214,90 @@ function r3buildChunk(cx, cy) {
       const pal = TCOL[t]; hex = pal ? pal[Math.floor(h * pal.length) % pal.length] : (t === T.TILE ? '#c8d2da' : t === T.FLESH ? '#8a3a5a' : '#777');
       if (t === T.GRASS || t === T.FOREST) { const n = vnoise(tx / 5, ty / 5, G.seed + 11); hex = m3Hex(hex, n > .55 ? '#6a9a3a' : '#3f6a30', Math.abs(n - .5) * .7); }
       if (t === T.SAND) hex = m3Hex(hex, '#e2cd96', .2); if (t === T.ROAD) hex = m3Hex(hex, '#2c2e34', .2);
+      if (dm === 'in') hex = '#b5803f'; else if (dm === 'out') hex = '#9a3a2c'; // seuil en bois, paillasson rouge
     }
     const j1 = (h - .5) * .08, j2 = (hash2(tx, ty, 78) - .5) * .08;
-    // diagonale (h00,h11)
     tri([tx, h00, ty], [tx, h01, ty + 1], [tx + 1, h11, ty + 1], hex, j1); tri([tx, h00, ty], [tx + 1, h11, ty + 1], [tx + 1, h10, ty], hex, j2);
-    if (t === T.ROAD && ((tx + ty) % 4 === 0) && false) { /* marquage supprimé */ }
     if (t === T.WATER) { const sd = G.shore[i], wh = '#' + new THREE.Color(.20 + Math.min(sd, 6) * -.012, .5 - Math.min(sd, 6) * .03, .72 - Math.min(sd, 6) * .03).getHexString(), cc = C3(wh); const y = -.16; for (const p of [[tx, y, ty], [tx, y, ty + 1], [tx + 1, y, ty + 1], [tx, y, ty], [tx + 1, y, ty + 1], [tx + 1, y, ty]]) { wp.push(p[0], p[1], p[2]); wc.push(cc.r, cc.g, cc.b); } }
     if (t === T.WALLT || t === T.PALI) { // extrusion
       const bn = R3.bidx[i], bc = bn >= 0 ? m3Hex(G.buildings[bn].roof || '#888888', '#d8d0c0', .6) : null;
       const H = t === T.PALI ? .7 : WALL_H, top = t === T.PALI ? '#8a7650' : (bc ? m3Hex(bc, '#ffffff', .12) : WALLC[Math.floor(h * 3) % 3]), side = t === T.PALI ? '#6a5a3c' : (bc || '#4a4c54');
-      const isW = (a, b) => { if (!inb(a, b)) return false; const tt = G.tiles[IDX(a, b)]; return tt === T.WALLT || tt === T.PALI; };
-      const q = (p0, p1, p2, p3, hx) => { tri(p0, p1, p2, hx, 0); tri(p0, p2, p3, hx, 0); };
       q([tx, H, ty], [tx, H, ty + 1], [tx + 1, H, ty + 1], [tx + 1, H, ty], top);
-      if (!isW(tx, ty + 1)) q([tx, 0, ty + 1], [tx + 1, 0, ty + 1], [tx + 1, H, ty + 1], [tx, H, ty + 1], m3Hex(side, '#000000', 0));
-      if (!isW(tx, ty - 1)) q([tx + 1, 0, ty], [tx, 0, ty], [tx, H, ty], [tx + 1, H, ty], m3Hex(side, '#000000', .25));
-      if (!isW(tx - 1, ty)) q([tx, 0, ty], [tx, 0, ty + 1], [tx, H, ty + 1], [tx, H, ty], m3Hex(side, '#000000', .15));
-      if (!isW(tx + 1, ty)) q([tx + 1, 0, ty + 1], [tx + 1, 0, ty], [tx + 1, H, ty], [tx + 1, H, ty + 1], m3Hex(side, '#000000', .1));
+      if (!isWall(tx, ty + 1)) q([tx, 0, ty + 1], [tx + 1, 0, ty + 1], [tx + 1, H, ty + 1], [tx, H, ty + 1], m3Hex(side, '#000000', 0));
+      if (!isWall(tx, ty - 1)) q([tx + 1, 0, ty], [tx, 0, ty], [tx, H, ty], [tx + 1, H, ty], m3Hex(side, '#000000', .25));
+      if (!isWall(tx - 1, ty)) q([tx, 0, ty], [tx, 0, ty + 1], [tx, H, ty + 1], [tx, H, ty], m3Hex(side, '#000000', .15));
+      if (!isWall(tx + 1, ty)) q([tx + 1, 0, ty + 1], [tx + 1, 0, ty], [tx + 1, H, ty], [tx + 1, H, ty + 1], m3Hex(side, '#000000', .1));
       if (t === T.PALI) { for (let k = 0; k < 3; k++) { const sx = tx + .17 + k * .33; tri([sx - .1, H, ty + .5], [sx + .1, H, ty + .5], [sx, H + .22, ty + .5], '#9a8458', 0); } }
+      else if (bn >= 0) { // fenêtres sur les façades extérieures
+        const dirs = [[0, 1], [0, -1], [-1, 0], [1, 0]];
+        for (let di = 0; di < 4; di++) {
+          const nx = tx + dirs[di][0], ny = ty + dirs[di][1]; if (!inb(nx, ny) || isWall(nx, ny) || R3.bidx[IDX(nx, ny)] === bn) continue; if (hash2(tx, ty, 40 + di) < .3) continue;
+          const ax = di < 2 ? 1 : 0, ay = di < 2 ? 0 : 1; let nearDoor = false; for (const k of [-1, 0, 1]) if (R3.doorMap.get(IDX(clamp(tx + ax * k, 0, G.W - 1), clamp(ty + ay * k, 0, G.H - 1))) === 'in' || R3.doorMap.get(IDX(clamp(nx + ax * k, 0, G.W - 1), clamp(ny + ay * k, 0, G.H - 1))) === 'out') nearDoor = true; if (nearDoor) continue;
+          const P = (u, y, off) => di === 0 ? [tx + u, y, ty + 1 + off] : di === 1 ? [tx + 1 - u, y, ty - off] : di === 2 ? [tx - off, y, ty + u] : [tx + 1 + off, y, ty + 1 - u];
+          q(P(.17, .46, .006), P(.83, .46, .006), P(.83, 1.0, .006), P(.17, 1.0, .006), '#3a2c20'); // cadre
+          wq(P(.25, .52, .014), P(.75, .52, .014), P(.75, .94, .014), P(.25, .94, .014), '#ffffff'); // vitre (éclairée la nuit)
+          q(P(.48, .52, .02), P(.52, .52, .02), P(.52, .94, .02), P(.48, .94, .02), '#3a2c20');
+        }
+      }
+    }
+  }
+  // entrées : encadrement, linteau, auvent rayé, lanterne
+  for (const [bn, d] of R3.doorsByChunk.get(cy * 1000 + cx) || []) {
+    const b = G.buildings[bn], pt = R3.bpoi[bn], acc = ACCENT[pt ? pt.type : 'house'] || '#c0392b', horiz = d.s < 2, dir = (d.s === 0 || d.s === 2) ? -1 : 1, wall = m3Hex(b.roof || '#888888', '#d8d0c0', .6), wood = '#4a3220', H = WALL_H;
+    if (horiz) {
+      const z0 = d.y, z1 = d.y + 1, ze = dir < 0 ? z0 : z1; // face extérieure du mur
+      box(d.x - .12, 0, z0, d.x + .06, H, z1, wood); box(d.x + 1.94, 0, z0, d.x + 2.12, H, z1, wood); box(d.x, H - .32, z0, d.x + 2, H, z1, wall, m3Hex(wall, '#ffffff', .12));
+      for (let k = 0; k < 4; k++) { const xa = d.x + k * .5, xb = xa + .5, c = k % 2 ? '#f4efe2' : acc; qUp([xa, H - .06, ze], [xb, H - .06, ze], [xb, H - .52, ze + dir * 1.05], [xa, H - .52, ze + dir * 1.05], c); }
+      wq([d.x + .85, H - .5, ze + dir * .03], [d.x + 1.15, H - .5, ze + dir * .03], [d.x + 1.15, H - .36, ze + dir * .03], [d.x + .85, H - .36, ze + dir * .03], '#fff0b0');
+    } else {
+      const x0b = d.x, x1b = d.x + 1, xe = dir < 0 ? x0b : x1b;
+      box(x0b, 0, d.y - .12, x1b, H, d.y + .06, wood); box(x0b, 0, d.y + 1.94, x1b, H, d.y + 2.12, wood); box(x0b, H - .32, d.y, x1b, H, d.y + 2, wall, m3Hex(wall, '#ffffff', .12));
+      for (let k = 0; k < 4; k++) { const za = d.y + k * .5, zb = za + .5, c = k % 2 ? '#f4efe2' : acc; qUp([xe, H - .06, za], [xe, H - .06, zb], [xe + dir * 1.05, H - .52, zb], [xe + dir * 1.05, H - .52, za], c); }
     }
   }
   const mk = (p, c, mat) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(c, 3)); geo.computeVertexNormals(); const m = new THREE.Mesh(geo, mat); m.frustumCulled = true; return m; };
   const mesh = mk(pos, col, R3.mats.terrain); mesh.receiveShadow = true; mesh.castShadow = true; R3.scene.add(mesh);
   let water = null; if (wp.length) { water = mk(wp, wc, R3.mats.water); water.renderOrder = 2; R3.scene.add(water); }
-  return { mesh, water, cx, cy };
+  let win = null; if (wnp.length) { win = mk(wnp, wnc, R3.mats.win); R3.scene.add(win); }
+  const ch = { mesh, water, win, objMesh: null, cx, cy, fx: [], inter: [], sig: 0 }; r3bakeObjs(ch);
+  return ch;
+}
+
+// objets extérieurs fusionnés dans un seul maillage par chunk ; objets intérieurs / animés listés à part
+function r3bakeObjs(ch) {
+  if (ch.objMesh) { R3.scene.remove(ch.objMesh); ch.objMesh.geometry.dispose(); ch.objMesh = null; }
+  ch.fx = []; ch.inter = []; const x0 = ch.cx * CHK, y0 = ch.cy * CHK, x1 = Math.min(G.W, x0 + CHK), y1 = Math.min(G.H, y0 + CHK), items = []; let nv = 0, sig = 0;
+  for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
+    const i = IDX(tx, ty), o = G.objs.get(i); if (!o) continue; sig = (sig * 31 + (o.dep ? 7 : 1) + (o.opened ? 13 : 0)) | 0;
+    if (R3.bidx[i] >= 0) { ch.inter.push([o, tx, ty]); continue; }
+    if (R3.FX_KINDS[o.k]) ch.fx.push([o, tx, ty]);
+    const sp = r3objSpec(o, tx, ty); if (!sp) continue; const geo = R3.geo[sp.key]; if (!geo) continue; items.push([geo, sp]); nv += geo.attributes.position.count;
+  }
+  ch.sig = sig;
+  if (!items.length) return;
+  const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), Cc = new Float32Array(nv * 3); let o3 = 0;
+  for (const [geo, sp] of items) {
+    const pa = geo.attributes.position.array, na = geo.attributes.normal.array, ca = geo.attributes.color.array, c = Math.cos(sp.ry), s = Math.sin(sp.ry), tn = sp.tint === undefined ? 1 : sp.tint;
+    for (let k = 0; k < pa.length; k += 3) {
+      const x = pa[k] * sp.sx, y = pa[k + 1] * sp.sy, z = pa[k + 2] * sp.sz;
+      P[o3] = sp.x + x * c + z * s; P[o3 + 1] = sp.y + y; P[o3 + 2] = sp.z - x * s + z * c;
+      N[o3] = na[k] * c + na[k + 2] * s; N[o3 + 1] = na[k + 1]; N[o3 + 2] = -na[k] * s + na[k + 2] * c;
+      Cc[o3] = ca[k] * tn; Cc[o3 + 1] = ca[k + 1] * tn; Cc[o3 + 2] = ca[k + 2] * tn; o3 += 3;
+    }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(N, 3)); g.setAttribute('color', new THREE.BufferAttribute(Cc, 3));
+  const m = new THREE.Mesh(g, R3.mats.terrain); m.castShadow = true; m.receiveShadow = true; R3.scene.add(m); ch.objMesh = m; R3.stats.baked = (R3.stats.baked || 0) + 1;
 }
 
 // ---------- toits des bâtiments ----------
+const _it = {};
+function iconTex(ch) {
+  if (_it[ch]) return _it[ch]; const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c = cv.getContext('2d');
+  c.fillStyle = 'rgba(255,255,255,.86)'; c.beginPath(); c.arc(64, 64, 58, 0, Math.PI * 2); c.fill(); c.strokeStyle = 'rgba(40,30,20,.55)'; c.lineWidth = 5; c.stroke();
+  c.font = '72px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ch, 64, 70);
+  const t = new THREE.CanvasTexture(cv); t.anisotropy = 4; return _it[ch] = t;
+}
+function r3freeRoof(m) { R3.scene.remove(m); m.geometry.dispose(); m.material.dispose(); if (m.userData.decal) m.userData.decal.material.dispose(); if (m.userData.extra) R3.scene.remove(m.userData.extra); }
 function r3roof(b, n) {
   let m = R3.roofs.get(n); if (m) return m;
   const g = GEO(), st = b.style, W = b.w, D = b.h, parts = [], rc = b.roof || '#666666', top = WALL_H;
@@ -246,12 +323,18 @@ function r3roof(b, n) {
     // coord locales → monde : rotation selon l'axe long
     const m4 = new THREE.Matrix4(); if (horiz) m4.makeTranslation(0, 0, D / 2); else m4.makeRotationY(-Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(W / 2, 0, 0)); roof.applyMatrix4(m4); roof.computeVertexNormals();
     parts._raw = roof;
+    if (!st && (!R3.bpoi[n] || ['house', 'cabin', 'farm', 'village'].includes(R3.bpoi[n].type))) { const cx = horiz ? W * .72 : W / 2 - S * .2, cz = horiz ? D / 2 - S * .2 : D * .72; parts.push(P_(g.box, '#8a7a6a', cx, top + H + .05, cz, .34, .9, .34)); parts.push(P_(g.box, '#4a423a', cx, top + H + .52, cz, .42, .08, .42)); }
     if (st === 'church') { parts.push(P_(g.box, '#8a90a0', W / 2, top + H + .8, D * .18, Math.min(W, D) * .5, 1.8, Math.min(W, D) * .5)); parts.push(P_(g.pyr, '#5a606c', W / 2, top + H + 2.2, D * .18, Math.min(W, D) * .6, 1.4, Math.min(W, D) * .6, 0, Math.PI / 4, 0)); parts.push(P_(g.box, '#e8e4d8', W / 2, top + H + 3.1, D * .18, .08, .6, .08)); parts.push(P_(g.box, '#e8e4d8', W / 2, top + H + 3.2, D * .18, .36, .08, .08)); }
   }
   let geo = parts.length ? mergeParts(parts) : null; const raw = parts._raw;
   if (raw) { if (geo) { const pa = geo.attributes.position.array, ca = geo.attributes.color.array, pr = raw.attributes.position.array, cr = raw.attributes.color.array; const np = new Float32Array(pa.length + pr.length), nc = new Float32Array(ca.length + cr.length); np.set(pa); np.set(pr, pa.length); nc.set(ca); nc.set(cr, ca.length); geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(np, 3)); geo.setAttribute('color', new THREE.BufferAttribute(nc, 3)); geo.computeVertexNormals(); } else geo = raw; }
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 1 });
   m = new THREE.Mesh(geo, mat); m.position.set(b.x, 0, b.y); m.castShadow = true; m.receiveShadow = true; m.frustumCulled = true; m.renderOrder = 3; R3.scene.add(m); R3.roofs.set(n, m);
+  if (st !== 'lighthouse') { // pictogramme de fonction posé sur le toit : on reconnaît d'un coup d'œil maison, église, hôpital…
+    const pt = R3.bpoi[n], icon = pt && pt.type !== 'village' ? pt.def.icon : '🏠', small = !pt || pt.type === 'house' || pt.type === 'cabin' || pt.type === 'village';
+    const sz = clamp(Math.min(W, D) * (small ? .62 : .5), 1.3, 3.6), dm = new THREE.Mesh(new THREE.PlaneGeometry(sz, sz), new THREE.MeshBasicMaterial({ map: iconTex(icon), transparent: true, depthWrite: false }));
+    dm.rotation.x = -Math.PI / 2; dm.rotation.z = 0; const ridge = flat ? .32 : Math.min(W, D) * .36 + .32; dm.position.set(W / 2, top + ridge, D / 2); dm.renderOrder = 4; m.add(dm); m.userData.decal = dm;
+  }
   if (st === 'lighthouse') { // tour (toujours visible) + lanterne
     const tw = mergeParts([P_(g.cyl8, '#f2f2f2', 0, 2.2, 0, 1.5, 4.4, 1.5), P_(g.cyl8, '#c83a34', 0, 1.2, 0, 1.55, .7, 1.55), P_(g.cyl8, '#c83a34', 0, 3.1, 0, 1.55, .7, 1.55), P_(g.cyl8, '#fff4b0', 0, 4.7, 0, 1.0, .5, 1.0), P_(g.cone, '#c83a34', 0, 5.3, 0, 1.3, .8, 1.3)]);
     const t = new THREE.Mesh(tw, R3.mats.inst); t.position.set(b.x + W / 2, 0, b.y + D / 2); t.castShadow = true; R3.scene.add(t); m.userData.extra = t;

@@ -18,6 +18,11 @@ function mkHumanoid(o) {
   if (o.hair) inner.add(bmesh(g.sph, lam(o.hair), -.02, 1.04, 0, .36, .26, .36));
   if (o.helmet) inner.add(bmesh(g.sph, lam(o.helmet), 0, 1.04, 0, .4, .3, .4));
   if (o.pack) inner.add(bmesh(g.box, lam(o.pack), -.22, .66, 0, .14, .34, .3));
+  if (o.bandana) { inner.add(bmesh(g.box, lam(o.bandana), 0, 1.0, 0, .39, .09, .39)); inner.add(bmesh(g.box, lam(o.bandana), -.2, .98, 0, .1, .2, .1)); }
+  if (o.spikes) for (const sd of [-1, 1]) inner.add(bmesh(g.cone, lam('#9a9aa0'), 0, .96, sd * .3, .13, .26, .13));
+  if (o.crest) inner.add(bmesh(g.box, lam(o.crest), 0, 1.22, 0, .08, .16, .34));
+  if (o.armband) { armL.add(bmesh(g.box, lam(o.armband), 0, -.1, 0, .16, .1, .16)); armR.add(bmesh(g.box, lam(o.armband), 0, -.1, 0, .16, .1, .16)); }
+  if (o.ring) { const rg = new THREE.Mesh(new THREE.RingGeometry(.5, .64, 18), new THREE.MeshBasicMaterial({ color: o.ring, transparent: true, opacity: .8, depthWrite: false, side: THREE.DoubleSide })); rg.rotation.x = -Math.PI / 2; rg.position.y = .05; rg.renderOrder = 5; root.add(rg); }
   let gun = null; if (o.gun) { gun = new THREE.Group(); gun.position.set(.28, .66, .16); gun.add(bmesh(g.box, lam('#2a2c32'), .22, 0, 0, .6, .09, .08)); gun.add(bmesh(g.box, lam('#4a3c2c'), -.05, -.03, 0, .22, .12, .08)); inner.add(gun); }
   root.scale.setScalar(s); root.userData = { legL, legR, armL, armR, bodyMat, inner, gun, head, torso };
   return root;
@@ -58,6 +63,8 @@ function mkMob(m) {
   const human = !!d.human;
   const sc = clamp(r / 11, .75, 3) * .95;
   const o = { scale: sc, skin: human ? '#d6a984' : d.col, shirt: human ? (d.col || '#6a6a70') : m3Hex(d.col, '#3a3028', .55), pants: human ? '#3a3a44' : '#2c2a30', gun: human, hair: human ? '#3a2a1a' : null, helmet: human && (d.boss || /legion|sold/.test(t)) ? '#4a5a3a' : null };
+  if (human && d.fac === 'raider') { o.shirt = '#6a4a32'; o.pants = '#3a3028'; o.hair = null; o.bandana = '#c02a20'; o.spikes = 1; o.ring = d.boss ? '#ffd24a' : '#ff8a3a'; } // Chacals : cuir, bandana rouge, épaulières à pointes
+  else if (human && d.fac === 'legion') { o.shirt = d.col; o.pants = '#24141a'; o.hair = null; o.helmet = '#2a1a22'; o.crest = '#d01a40'; o.armband = '#e8c050'; o.ring = d.boss ? '#ffd24a' : '#d01a4a'; o.scale = sc * 1.05; } // Légion : uniforme, casque à cimier
   if (t === 'bloater') { o.fat = 1.9; o.shirt = m3Hex(d.col, '#9a8f3c', .4); } if (t === 'brute' || t === 'charger') { o.fat = 1.35; o.scale = sc * 1.15; }
   if (t === 'burner') o.shirt = '#7a3a22'; if (t === 'toxic') o.shirt = '#58802a'; if (t === 'ghoul') { o.skin = '#aab8a0'; o.shirt = '#4a5a48'; }
   if (t === 'riot') { o.shirt = '#2a3a5a'; o.helmet = '#2a3040'; } if (t === 'necro') { o.shirt = '#4a2a6a'; o.hair = '#2a1a3a'; } if (t === 'leaper') { o.scale = sc * .95; }
