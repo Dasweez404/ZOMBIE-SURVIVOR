@@ -153,7 +153,7 @@ function drawHotbar(c, W, H, time) {
   else { c.font = '10px sans-serif'; c.fillStyle = '#6a747e'; c.textAlign = 'center'; c.fillText('gadget', gx + 37, y0 + 38); }
   // poids + capsules
   c.font = 'bold 12px sans-serif'; c.textAlign = 'right'; const wt = invWeight(), cap = invCap(); c.fillStyle = wt > cap * .9 ? '#ff8a7a' : '#d8dce0'; c.fillText('🎒 ' + wt.toFixed(0) + '/' + cap, x0 - 12, y0 + 22); c.fillStyle = '#ffd24a'; c.fillText('🪙 ' + invCount('caps'), x0 - 12, y0 + 40);
-  c.font = '10px sans-serif'; c.fillStyle = 'rgba(200,210,220,.55)'; c.textAlign = 'center'; c.fillText('Tab sac · J quêtes · M carte · B construire · F1 aide', W / 2, H - 8);
+  c.font = '10px sans-serif'; c.fillStyle = 'rgba(200,210,220,.55)'; c.textAlign = 'center'; c.fillText('Espace esquive · Maj sprint · Q arme précédente · H soin · Tab sac · B construire · F1 aide', W / 2, H - 8);
 }
 
 // ----- heure, météo, boussole -----

@@ -159,6 +159,10 @@ function killMob(m, o) {
 
 function hurtPlayer(dmg, o) {
   if (P.dead || G.god) return; o = o || {};
+  if (P.invuln > 0) { // esquive : on évite le coup
+    if (!P.dodgeShown || G.clock - P.dodgeShown > .5) { P.dodgeShown = G.clock; if (P.dodgeT > 0 || P.invuln > .1) { addText(P.x, P.y - 34, 'ESQUIVE !', '#9fe8ff', true); P.stam = Math.min(maxStam(), P.stam + 14); G.slowT = Math.max(G.slowT, .35); P.perfectT = 3; SFX.play('levelup', .35); fxRing(P.x, P.y, 36, '150,230,255', .4); } }
+    return;
+  }
   if (P.veh && !o.pure && !o.ignoreVeh) { { const ab = vstat(P.veh).absorb; vehicleDamage(P.veh, dmg * ab); dmg *= 1 - ab; } if (P.dead) return; }
   const ar = armorValue();
   let d = o.pure ? dmg : dmg * (1 - ar / (ar + 30));

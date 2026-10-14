@@ -1,8 +1,22 @@
 'use strict';
 // ===== Logique du joueur : déplacement, tir, survie, interactions =====
 
+function dodgeRoll() {
+  if (!G || G.paused || P.dead || P.veh || P.dodgeT > 0 || (P.dodgeCd || 0) > 0) return;
+  if (P.stam < 16) { if (G.clock - (G.noStamMsg || 0) > 1.5) { addText(P.x, P.y - 30, 'Essoufflé', '#9ac', false); G.noStamMsg = G.clock; } return; }
+  const k = G.keys; let ix = (k.d ? 1 : 0) - (k.a ? 1 : 0), iy = (k.s ? 1 : 0) - (k.w ? 1 : 0);
+  if (!ix && !iy) { ix = -Math.cos(P.ang); iy = -Math.sin(P.ang); } const l = Math.hypot(ix, iy) || 1;
+  P.dodgeDx = ix / l; P.dodgeDy = iy / l; P.dodgeT = .26; P.invuln = .34; P.dodgeCd = .6; P.stam -= 16; P.staRegenT = 1; P.reloading = false;
+  SFX.play('whoosh', .9); fxRing(P.x, P.y + 6, 24, '220,210,190', .3);
+  for (let i = 0; i < 8; i++) addPart(P.x, P.y + 8, -P.dodgeDx * rnd(40, 120) + rnd(-30, 30), -P.dodgeDy * rnd(40, 120) + rnd(-30, 10), rnd(.3, .6), rnd(2, 4.5), 'rgba(180,160,125,.75)', 'dot');
+}
 function updatePlayer(dt) {
-  const k = G.keys; if (G.buildMode && !G.paused) buildDrag();
+  const k = G.keys; if (P.dodgeCd > 0) P.dodgeCd -= dt; if (P.invuln > 0) P.invuln -= dt;
+  if (P.dodgeT > 0) { // roulade : déplacement rapide, invulnérable
+    P.dodgeT -= dt; moveEnt(P, P.dodgeDx * 430 * dt, P.dodgeDy * 430 * dt, true); P.moving = true;
+    if (Math.random() < dt * 40) addPart(P.x, P.y + 8, rnd(-20, 20), rnd(-20, 0), .35, rnd(2, 3.5), 'rgba(200,185,150,.6)', 'dot');
+    P.ang = Math.atan2(G.mouse.y - P.y, G.mouse.x - P.x); P.walk = (P.walk || 0) + 16 * dt; return;
+  } if (G.buildMode && !G.paused) buildDrag();
   let ix = (k.d ? 1 : 0) - (k.a ? 1 : 0), iy = (k.s ? 1 : 0) - (k.w ? 1 : 0);
   const il = Math.hypot(ix, iy); if (il > 0) { ix /= il; iy /= il; }
   P.moving = il > 0 && !P.veh;
@@ -31,6 +45,7 @@ function updatePlayer(dt) {
   if (P.noiseT <= 0 && P.moving && !P.veh) { P.noiseT = .6; makeNoise(P.x, P.y, P.sprint ? 230 : 95, true); }
 
   // timers
+  if (P.perfectT > 0) P.perfectT -= dt;
   P.cd -= dt; P.gadCd -= dt; P.useCd -= dt; P.healCd -= dt;
   if (P.swing > 0) P.swing -= dt; if (P.hurtT > 0) P.hurtT -= dt; if (P.flashT > 0) P.flashT -= dt; if (P.painT > 0) P.painT -= dt;
   P.bloom = Math.max(0, P.bloom - dt * .4);
@@ -100,19 +115,21 @@ function toolPower(kind) {
   return best;
 }
 function meleeSwing(w, s) {
-  P.cd = s.rate; P.swing = .2; P.swingA = P.ang; SFX.play('swing', .7);
+  P.mStep = (G.clock - (P.mLast || -9) < .75) ? ((P.mStep || 0) + 1) % 3 : 0; P.mLast = G.clock; const fin = P.mStep === 2; P.swingDir = P.mStep % 2 ? -1 : 1;
+  P.cd = s.rate * (fin ? 1.25 : 1); P.swing = fin ? .26 : .2; P.swingA = P.ang; SFX.play('swing', fin ? 1 : .7);
+  { const lu = fin ? 20 : 11; moveEnt(P, Math.cos(P.ang) * lu, Math.sin(P.ang) * lu, true); G.kick.x += Math.cos(P.ang) * 2; G.kick.y += Math.sin(P.ang) * 2; } // fente
   let hitAny = false;
   for (const m of G.mobs) {
     if (m.dead) continue; const d = dist(P.x, P.y, m.x, m.y);
     if (d > s.range + m.r) continue;
     const a = ang(P.x, P.y, m.x, m.y);
-    if (Math.abs(angDiff(P.ang, a)) < s.arc / 2 + m.r / Math.max(d, 1)) { hurtMob(m, s.dmg, { kind: 'melee', ang: a, kb: s.kb, crit: Math.random() < .08 + .02 * P.skills.aim, src: 'p' }); hitAny = true; }
+    if (Math.abs(angDiff(P.ang, a)) < s.arc / 2 + m.r / Math.max(d, 1)) { hurtMob(m, s.dmg * (fin ? 1.7 : 1) * (P.perfectT > 0 ? 1.3 : 1), { kind: 'melee', ang: a, kb: s.kb * (fin ? 2.2 : 1), crit: fin || Math.random() < .08 + .02 * P.skills.aim, src: 'p' }); hitAny = true; if (fin) { hitstop(.06); addPart(m.x, m.y, 0, 0, .25, 9, '#fff', 'dot'); } }
   }
   if (!hitAny) { // récolte
     const o = nearestHarvestable(P.x + Math.cos(P.ang) * 26, P.y + Math.sin(P.ang) * 26, s.range + 16, true);
     if (o) { harvestHit(o, WEAPONS[w.id]); hitAny = true; }
   }
-  if (hitAny) { shake(1.5); wearGear(w, .45); }
+  if (hitAny) { shake(fin ? 4 : 1.5); wearGear(w, .45); if (fin) { addText(P.x, P.y - 32, 'COUP FINAL !', '#ffd86a', true); fxRing(P.x + Math.cos(P.ang) * 30, P.y + Math.sin(P.ang) * 30, 40, '255,220,140', .3); } }
   makeNoise(P.x, P.y, s.noise, true);
 }
 

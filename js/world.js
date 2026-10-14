@@ -111,7 +111,7 @@ function addObj(tx, ty, kind, props) {
 function removeObj(o) { const i = IDX(o.tx, o.ty); G.objs.delete(i); if (G.solid[i] === SO.OBJ) G.solid[i] = 0; }
 
 // ----- options de monde -----
-const WORLD_SIZES = { S: { n: 'Petit', v: 110 }, M: { n: 'Moyen', v: 150 }, L: { n: 'Grand', v: 200 } };
+const WORLD_SIZES = { S: { n: 'Petit', v: 130 }, M: { n: 'Moyen', v: 180 }, L: { n: 'Grand', v: 240 } };
 const WORLD_STYLES = {
   balanced: { n: 'Équilibré', scale: 30, off: .07, moist: 0, trees: 1, rocks: 1, wrecks: 1, lakes: 0 },
   forest:   { n: 'Forêts denses', scale: 30, off: .07, moist: .14, trees: 1.35, rocks: .8, wrecks: .8, lakes: 0 },
@@ -181,9 +181,10 @@ function placePOIs(rng) {
   const W = G.W, H = G.H, cx = W / 2, cy = H / 2;
   const f = wScale(), dk = (WORLD_DENS[G.dens] || WORLD_DENS[1]).k, order = [['village', 1], ['nomads', 1]];
   const UNIQ = { hospital: 1, police: 1, bunker: 1, legion: 1, radio: 1, market: 1, warehouse: 1, camp: 2, farm: 1, gas: 1, church: 1, school: 1, diner: 1, firestation: 1, lab: 1, lighthouse: 1, prison: 1, trailer: 1, mine: 1, hive: 1, crash: 1, graveyard: 1, funfair: 1, drivein: 1, powerplant: 1, castle: 1 };
-  for (const k of ['hospital', 'castle', 'drivein', 'police', 'prison', 'lab', 'hive', 'mine', 'school', 'firestation', 'church', 'trailer', 'crash', 'funfair', 'powerplant', 'graveyard', 'lighthouse', 'diner', 'market', 'warehouse', 'bunker', 'legion', 'camp', 'radio', 'farm', 'gas', 'cabin', 'house']) {
+  for (const k of ['hospital', 'camp', 'legion', 'castle', 'drivein', 'police', 'prison', 'lab', 'hive', 'mine', 'school', 'firestation', 'church', 'trailer', 'crash', 'funfair', 'powerplant', 'graveyard', 'lighthouse', 'diner', 'market', 'warehouse', 'bunker', 'radio', 'farm', 'gas', 'cabin', 'house']) {
     if (k === 'nomads') continue;
-    const n = Math.max(UNIQ[k] || 4, Math.round(POICOUNT[k] * f * f * dk * (f < 1 ? 1.25 : 1)));
+    const sparse = ['house', 'cabin', 'farm', 'gas', 'camp'].includes(k) ? .55 : .8; // monde aéré : moins de lieux, plus d'espace
+    const n = Math.max(UNIQ[k] || 3, Math.round(POICOUNT[k] * f * f * dk * sparse * (f < 1 ? 1.25 : 1)));
     for (let i = 0; i < n; i++) order.push([k, 1]);
   }
   const rng_d = { nomads: [18, 40], church: [12, 60], school: [18, 56], diner: [10, 60], firestation: [18, 56], lab: [30, 58], lighthouse: [20, 62], prison: [34, 60], trailer: [14, 60], mine: [26, 60], hive: [46, 64], crash: [20, 62], funfair: [20, 58], drivein: [16, 58], powerplant: [30, 62], castle: [36, 62], graveyard: [12, 60], village: [26, 34], hospital: [24, 55], police: [18, 50], market: [20, 55], warehouse: [26, 60], bunker: [46, 64], legion: [44, 64], camp: [24, 58], radio: [34, 62], farm: [16, 60], gas: [12, 60], cabin: [14, 62], house: [8, 64] };
@@ -196,7 +197,7 @@ function placePOIs(rng) {
       const a = rng.range(0, TAU), d = rng.range(d0, d1);
       const x = Math.round(cx + Math.cos(a) * d - w / 2), y = Math.round(cy + Math.sin(a) * d - h / 2);
       if (type !== 'village' && type !== 'nomads' && Math.hypot(x + w / 2 - cx, y + h / 2 - cy) < (type === 'house' || type === 'cabin' ? 13 : 24)) continue; // départ au calme
-      if (!rectFree(x, y, w, h, tries > 1000 ? 1 : tries > 500 ? 2 : (type === 'house' || type === 'cabin' ? 1 : 3))) continue;
+      if (!rectFree(x, y, w, h, tries > 1000 ? 1 : tries > 500 ? 2 : (type === 'house' || type === 'cabin' ? 3 : f < 1 ? 4 : 6))) continue;
       if (def.coast && tries < 1000 && !nearWater(x, y, w, h)) continue;
       if (type === 'cabin') { const m = G.moist[(y + (h >> 1)) * W + x + (w >> 1)]; if (m < .5 && tries < 300) continue; }
       const p = { id: id++, type, name: def.n, x, y, w, h, cx: (x + w / 2) * TS, cy: (y + h / 2) * TS, spawned: false, cleared: false, owned: false, discovered: false, lvl: 1, mobs: [], crates: [], hpFlag: 0, stash: null, chest: null, def };
@@ -565,10 +566,10 @@ function scatterObjects(rng) {
     const i = y * W + x, t = G.tiles[i];
     if (G.solid[i] || G.objs.has(i) || G.reserve[i]) continue;
     if (Math.hypot(x - sx, y - sy) < 4) continue;
-    const r = rng.next(), cl = vnoise(x / 3.5, y / 3.5, G.seed + 9);
+    const r = rng.next() * (t === T.FOREST ? 1.2 : 2.1), cl = vnoise(x / 3.5, y / 3.5, G.seed + 9);
     if (t === T.ROAD) { if (r < .012 * kW) addObj(x, y, 'wreck', { ang: rng.range(0, TAU) }); else if (r < .02) addObj(x, y, 'scrappile'); continue; }
     if (t === T.FOREST) {
-      const dens = Math.min(.7, (.22 + cl * .35) * kT);
+      const dens = Math.min(.6, (.22 + cl * .35) * kT);
       if (r < dens) addObj(x, y, 'tree');
       else if (r < dens + .02) addObj(x, y, 'bush');
       else if (r < dens + .035) addObj(x, y, 'herb');
@@ -601,7 +602,7 @@ function spawnAnimals(rng) {
   G.mobs = G.mobs || [];
   const mk = (t, n, d0, d1) => { for (let i = 0; i < n; i++) { const p = randomLandTile(rng, d0, d1); if (p) G.mobsInit.push({ t, x: p[0] * TS + 16, y: p[1] * TS + 16 }); } };
   G.mobsInit = [];
-  const q = wScale() * wScale(); mk('rabbit', Math.round(26 * q), 4, 60); mk('deer', Math.round(14 * q), 8, 62); mk('boar', Math.round(12 * q), 10, 62); mk('wolf', Math.round(12 * q), 16, 64); mk('spider', Math.max(3, Math.round(6 * q)), 22, 64); mk('scorpion', Math.max(3, Math.round(6 * q)), 22, 64); mk('hound', Math.max(3, Math.round(5 * q)), 42, 64); mk('bear', Math.max(2, Math.round(3 * q)), 46, 66);
+  const q = wScale() * wScale(); mk('rabbit', Math.round(17 * q), 4, 60); mk('deer', Math.round(9 * q), 8, 62); mk('boar', Math.round(7 * q), 10, 62); mk('wolf', Math.round(7 * q), 16, 64); mk('spider', Math.max(3, Math.round(6 * q)), 22, 64); mk('scorpion', Math.max(3, Math.round(6 * q)), 22, 64); mk('hound', Math.max(3, Math.round(5 * q)), 42, 64); mk('bear', Math.max(2, Math.round(3 * q)), 46, 66);
 }
 
 function buildStartCamp(rng) {

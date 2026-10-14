@@ -232,7 +232,7 @@ function drawPlayer(c, time) {
   let reach = 0;
   if (w) {
     const b = WEAPONS[w.id];
-    if (b.melee) { reach = P.swing > 0 ? 16 : 6; c.save(); c.translate(12, 7); c.rotate(P.swing > 0 ? -.9 + (1 - P.swing / .2) * 1.8 : .3); drawMeleeModel(c, w.id, b); c.restore(); }
+    if (b.melee) { reach = P.swing > 0 ? 16 : 6; c.save(); c.translate(12, 7); c.rotate(P.swing > 0 ? (-.9 + (1 - P.swing / .2) * 1.8) * (P.swingDir || 1) : .3); drawMeleeModel(c, w.id, b); c.restore(); }
     else {
       const len = b.flame ? 26 : ({ pistol: 14, smg: 20, shotgun: 26, hunter: 32, ar: 28, crossbow: 22 }[w.id] || 18);
       let g = c.createLinearGradient(0, -2.6, 0, 2.6); g.addColorStop(0, '#6a6e78'); g.addColorStop(1, '#1c1e24'); c.fillStyle = g; rrect(c, 7, -2.6, len, 5.2, 1.6); c.fill(); c.strokeStyle = 'rgba(0,0,0,.6)'; c.lineWidth = .8; c.stroke(); c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(8, -2, len - 2, 1);

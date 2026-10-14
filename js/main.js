@@ -3,7 +3,7 @@
 let lastTs = 0, running = false;
 
 function selectSlot(i) {
-  if (P.slots[i] && P.sel !== i) { P.sel = i; P.reloading = false; P.cd = Math.max(P.cd, .15); SFX.play('whoosh', .6); }
+  if (P.slots[i] && P.sel !== i) { P.lastSel = P.sel; P.sel = i; P.reloading = false; P.cd = Math.max(P.cd, .15); SFX.play('whoosh', .6); }
 }
 function cycleWeapon(dir) {
   const ids = P.slots.map((w, i) => w ? i : -1).filter(i => i >= 0); if (ids.length < 2) return;
@@ -40,7 +40,9 @@ function onKeyDown(e) {
   if (key === 'm') { if (panelTab === 'map') closePanel(); else if (!G.paused || panelOpen()) openPanel('map'); return; }
   if (G.paused) return;
   const dm = /^(Digit|Numpad)([1-5])$/.exec(code); if (dm) { selectSlot(+dm[2] - 1); return; }
+  if (code === 'Space') { if (!e.repeat) dodgeRoll(); return; }
   switch (key) {
+    case 'q': if (P.lastSel !== undefined && P.slots[P.lastSel]) selectSlot(P.lastSel); break;
     case 'e': G.keys.e = true; if (!e.repeat) interact(); break;
     case 'r': startReload(); break;
     case 'h': quickHeal(); break;
