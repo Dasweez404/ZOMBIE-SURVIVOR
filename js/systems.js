@@ -134,7 +134,7 @@ function activatePOI(p) {
 function updatePOIs() {
   for (const p of G.pois) {
     if (p.hidden || p.type === 'village' || p.def.friendly) continue;
-    if (!p.spawned && dist(P.x, P.y, p.cx, p.cy) < 1000 && !p.cleared) activatePOI(p);
+    if (!p.spawned && !p.cleared) { const d = dist(P.x, P.y, p.cx, p.cy); if (d < 1000 && (G.playTime > 45 || d < 520 || dist(p.cx, p.cy, G.spawn.x, G.spawn.y) > 1300)) activatePOI(p); }
     if (p.spawned && !p.cleared) {
       if (!G.mobs.some(m => !m.dead && m.poi === p.id)) {
         p.cleared = true; msg('Zone nettoyée : ' + p.name + (p.def.claim ? ' — vous pouvez la réclamer (E sur le drapeau).' : ''), '#8affb0'); addXP(30); SFX.play('levelup');
@@ -311,7 +311,7 @@ function aliveCount(f) { let n = 0; for (const m of G.mobs) if (!m.dead && f(m))
 function updateSpawning(dt) {
   G.ambT -= dt;
   if (G.ambT <= 0) {
-    const night = isNight(); G.ambT = night ? .9 : 2;
+    const night = isNight(); G.ambT = night ? .9 : 2; if (G.playTime < 30) return;
     const dm = difficultyMul();
     const cap = Math.min(70, Math.round((6 + G.day * 1.5) * (night ? 1.8 : 1) * dm.cnt * (tutSafe() ? .3 : 1)));
     const count = aliveCount(m => m.ambient && m.def.fac === 'undead' && !m.horde && !m.assault);
@@ -497,7 +497,8 @@ function initGame(opts) {
   G.structsFree = [];
   const cf = placeStruct('campfire', G.campfireStart.tx, G.campfireStart.ty, true); cf.free = true;
   // animaux
-  for (const a of G.mobsInit) spawnMob(a.t, a.x, a.y, {});
+  const DANGER = ['wolf', 'boar', 'bear', 'hound', 'ghoul', 'spider', 'scorpion', 'walker'];
+  for (const a of G.mobsInit) if (!(DANGER.includes(a.t) && dist(a.x, a.y, G.spawn.x, G.spawn.y) < 1100)) spawnMob(a.t, a.x, a.y, {}); // départ au calme
   // PNJ
   for (const n of G.npcsDef) G.npcs.push({ id: n.id, name: n.name, role: n.role, col: n.col, x: n.x * TS + 16, y: n.y * TS + 16, r: 12, anim: Math.random() * 6, face: 0 });
   // gardes du fort

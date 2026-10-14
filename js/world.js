@@ -174,6 +174,7 @@ function nearWater(x, y, w, h) {
 function inSafeZone(x, y) {
   if (G.village && dist(x, y, G.village.cx, G.village.cy) < G.village.safe) return true;
   if (G.nomads && dist(x, y, G.nomads.cx, G.nomads.cy) < G.nomads.safe) return true;
+  if (G.spawn && dist(x, y, G.spawn.x, G.spawn.y) < 560) return true; // camp de départ
   return false;
 }
 function placePOIs(rng) {
@@ -194,6 +195,7 @@ function placePOIs(rng) {
       if (tries > 450) { d0 = Math.max(6, d0 * .6); d1 = Math.min(W / 2 - 9, d1 * 1.2); } if (tries > 1200) { d0 = 6; d1 = W / 2 - 9; }
       const a = rng.range(0, TAU), d = rng.range(d0, d1);
       const x = Math.round(cx + Math.cos(a) * d - w / 2), y = Math.round(cy + Math.sin(a) * d - h / 2);
+      if (type !== 'village' && type !== 'nomads' && Math.hypot(x + w / 2 - cx, y + h / 2 - cy) < (type === 'house' || type === 'cabin' ? 13 : 24)) continue; // départ au calme
       if (!rectFree(x, y, w, h, tries > 1000 ? 1 : tries > 500 ? 2 : (type === 'house' || type === 'cabin' ? 1 : 3))) continue;
       if (def.coast && tries < 1000 && !nearWater(x, y, w, h)) continue;
       if (type === 'cabin') { const m = G.moist[(y + (h >> 1)) * W + x + (w >> 1)]; if (m < .5 && tries < 300) continue; }
