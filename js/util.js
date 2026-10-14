@@ -50,7 +50,7 @@ function fbm(x, y, s, oct = 4) {
 }
 
 // ===== Réglages (persistants) =====
-const SET_DEFAULT = { vol: .8, music: .5, shake: 1, dmgNums: true, tips: true, tutorial: true, hud: 1, quality: 1, hitstop: true, autopause: true };
+const SET_DEFAULT = { vol: .8, music: .5, shake: 1, dmgNums: true, tips: true, tutorial: true, hud: 1, quality: 1, hitstop: true, autopause: true, mode3d: false };
 const SET = Object.assign({}, SET_DEFAULT);
 try { Object.assign(SET, JSON.parse(localStorage.getItem('zs_set') || '{}')); } catch (e) { }
 function saveSettings() { try { localStorage.setItem('zs_set', JSON.stringify(SET)); } catch (e) { } if (window.SFX && SFX.ctx) { SFX.setVol(); } }

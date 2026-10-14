@@ -20,7 +20,7 @@ function onKeyDown(e) {
   if (!G || !running) return;
   if (e.target && (e.target.tagName === 'INPUT')) return;
   const code = e.code, key = e.key.toLowerCase();
-  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1'].includes(code)) e.preventDefault();
+  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1', 'F3', 'F4'].includes(code)) e.preventDefault();
   if (G.over) return;
   if (code === 'F1' || key === '?') { toggleHelp(); return; }
   if (!$('settings').classList.contains('hidden')) { if (key === 'escape') closeSettings(); return; }
@@ -40,6 +40,8 @@ function onKeyDown(e) {
   if (key === 'm') { if (panelTab === 'map') closePanel(); else if (!G.paused || panelOpen()) openPanel('map'); return; }
   if (G.paused) return;
   const dm = /^(Digit|Numpad)([1-5])$/.exec(code); if (dm) { selectSlot(+dm[2] - 1); return; }
+  if (code === 'F3') { setMode3D(!SET.mode3d); return; }
+  if (code === 'F4' && use3D()) { R3.showStats = !R3.showStats; return; }
   if (code === 'Space') { if (!e.repeat) dodgeRoll(); return; }
   switch (key) {
     case 'q': if (P.lastSel !== undefined && P.slots[P.lastSel]) selectSlot(P.lastSel); break;
@@ -111,7 +113,7 @@ function frame(ts) {
   if (!running || !G) { lastTs = ts; return; }
   let dt = Math.min(.05, (ts - lastTs) / 1000 || .016); lastTs = ts;
   const time = ts / 1000;
-  G.mouse.x = G.mouse.sx + (G.camX || 0); G.mouse.y = G.mouse.sy + (G.camY || 0);
+  if (use3D()) r3mouse(); else { G.mouse.x = G.mouse.sx + (G.camX || 0); G.mouse.y = G.mouse.sy + (G.camY || 0); }
   if (G.hitstop > 0) { G.hitstop -= dt; dt = 0; }
   if (G.slowT > 0) { G.slowT -= dt; dt *= .35; }
   if (!G.paused && dt > 0) {
@@ -127,7 +129,7 @@ function frame(ts) {
 
 function startGame(opts) {
   let ov = document.getElementById('genov'); if (!ov) { ov = document.createElement('div'); ov.id = 'genov'; ov.style.cssText = 'position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;background:rgba(8,12,16,.86);color:#e8e0c8;font:600 20px sans-serif;letter-spacing:.04em'; document.body.appendChild(ov); }
-  ov.textContent = '🌍 Génération du monde…'; ov.style.display = 'flex';
+  if (SET.mode3d) ensure3D(); ov.textContent = '🌍 Génération du monde…'; ov.style.display = 'flex';
   setTimeout(() => { try { startGame2(opts); } finally { ov.style.display = 'none'; } }, 40);
 }
 function startGame2(opts) {
@@ -147,10 +149,10 @@ function buildSettings() {
   const check = k => '<input type="checkbox" data-set="' + k + '"' + (SET[k] ? ' checked' : '') + '>';
   $('settings').innerHTML = '<div class="box wide"><h2>⚙️ Options</h2>' +
     row('Volume des effets', slider('vol', 0, 1, .05)) + row('Ambiance sonore', slider('music', 0, 1, .05)) + row('Tremblements d\'écran', slider('shake', 0, 1.5, .1)) + row('Taille de l\'interface', slider('hud', .8, 1.4, .05)) +
-    row('Qualité graphique élevée', check('quality')) + row('Nombres de dégâts', check('dmgNums')) + row('Hit-stop (impact)', check('hitstop')) + row('Conseils contextuels', check('tips')) + row('Tutoriel au démarrage', check('tutorial')) + row('Pause si fenêtre inactive', check('autopause')) +
+    row('Mode 3D low-poly (bêta, F3)', check('mode3d')) + row('Qualité graphique élevée', check('quality')) + row('Nombres de dégâts', check('dmgNums')) + row('Hit-stop (impact)', check('hitstop')) + row('Conseils contextuels', check('tips')) + row('Tutoriel au démarrage', check('tutorial')) + row('Pause si fenêtre inactive', check('autopause')) +
     '<div class="srow"><button id="btnTips">Réafficher tous les conseils</button><button id="btnSetClose" class="pri">Fermer</button></div></div>';
   $('settings').querySelectorAll('input[data-set]').forEach(inp => {
-    inp.oninput = () => { const k = inp.dataset.set; SET[k] = inp.type === 'checkbox' ? (k === 'quality' ? (inp.checked ? 1 : 0) : inp.checked) : +inp.value; const sv = $('settings').querySelector('[data-sv="' + k + '"]'); if (sv) sv.textContent = Math.round(SET[k] * 100) + '%'; saveSettings(); if (k === 'music' && SFX.ctx) SFX.drone(.3); };
+    inp.oninput = () => { const k = inp.dataset.set; SET[k] = inp.type === 'checkbox' ? (k === 'quality' ? (inp.checked ? 1 : 0) : inp.checked) : +inp.value; const sv = $('settings').querySelector('[data-sv="' + k + '"]'); if (sv) sv.textContent = Math.round(SET[k] * 100) + '%'; saveSettings(); if (k === 'mode3d') setMode3D(SET.mode3d); if (k === 'music' && SFX.ctx) SFX.drone(.3); };
   });
   $('btnTips').onclick = () => { TIPS_SEEN = {}; saveTips(); SFX.play('ui'); };
   $('btnSetClose').onclick = closeSettings;

@@ -14,6 +14,7 @@ function resizeCanvas() {
   cvs.width = Math.floor(VW * DPR); cvs.height = Math.floor(VH * DPR);
   cvs.style.width = VW + 'px'; cvs.style.height = VH + 'px';
   lightCvs.width = Math.ceil(cvs.width / 2); lightCvs.height = Math.ceil(cvs.height / 2);
+  if (typeof r3resize === 'function') r3resize();
 }
 
 // ----- minimap -----
@@ -45,6 +46,8 @@ function updateCamera(dt) {
 
 // ----- rendu principal -----
 function render(time) {
+  if (use3D()) { render3(time); return; }
+  if (R3.canvas && R3.canvas.style.display !== 'none') R3.canvas.style.display = 'none';
   const c = ctx; c.setTransform(DPR, 0, 0, DPR, 0, 0);
   c.fillStyle = '#10161c'; c.fillRect(0, 0, VW, VH);
   const sh = G.shake, ox = sh ? rnd(-sh, sh) : 0, oy = sh ? rnd(-sh, sh) : 0;

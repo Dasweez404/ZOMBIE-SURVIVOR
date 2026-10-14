@@ -1,0 +1,1 @@
+three.js r128 — Copyright 2010-2021 three.js authors — licence MIT (voir l'en-tête de lib/three.min.js).
