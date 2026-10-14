@@ -147,8 +147,13 @@ function updatePOIs() {
 // ---------- Bases ----------
 function claimPOI(p) {
   if (!p.spawned) activatePOI(p);
-  if (!p.cleared) { msg('Éliminez d\'abord tous les occupants de ' + p.name + ' !', '#ff8a7a'); return; }
-  for (const m of G.mobs) if (!m.dead && m.def.fac !== 'wild' && dist(m.x, m.y, p.flag.x, p.flag.y) < 420) { msg('Des ennemis rôdent encore près du drapeau.', '#ff8a7a'); return; }
+  // à l'intérieur d'un bâtiment vide on peut revendiquer, même avec des ennemis dehors (ils gardent leur aggro)
+  const b = p.b, inside = b && P.x > b.x * TS && P.x < (b.x + b.w) * TS && P.y > b.y * TS && P.y < (b.y + b.h) * TS;
+  const emptyInside = inside && !G.mobs.some(m => !m.dead && m.def.fac !== 'wild' && m.x > b.x * TS && m.x < (b.x + b.w) * TS && m.y > b.y * TS && m.y < (b.y + b.h) * TS);
+  if (!emptyInside) {
+    if (!p.cleared) { msg('Éliminez d\'abord tous les occupants de ' + p.name + ' !', '#ff8a7a'); return; }
+    for (const m of G.mobs) if (!m.dead && m.def.fac !== 'wild' && dist(m.x, m.y, p.flag.x, p.flag.y) < 420) { msg('Des ennemis rôdent encore près du drapeau.', '#ff8a7a'); return; }
+  }
   p.owned = true; p.lvl = 1; p.baseR = Math.hypot(p.w, p.h) * TS / 2 + 170; p.hpFlag = BASE_LEVELS[1].hp;
   let placed = false;
   for (let r = 1; r < 4 && !placed; r++) for (let dy = -r; dy <= r && !placed; dy++) for (let dx = -r; dx <= r && !placed; dx++) {
