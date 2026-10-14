@@ -133,4 +133,4 @@ function clockText() {
   const h = (5 + phaseOf(G.clock) * 24) % 24; const hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
   return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
 }
-function difficultyMul() { return G.diff === 0 ? { hp: .8, dmg: .7, hun: .7, cnt: .75 } : G.diff === 2 ? { hp: 1.3, dmg: 1.35, hun: 1.3, cnt: 1.35 } : { hp: 1, dmg: 1, hun: 1, cnt: 1 }; }
+function difficultyMul() { return G.diff === 0 ? { hp: .8, dmg: .7, hun: .7, cnt: .6 } : G.diff === 2 ? { hp: 1.3, dmg: 1.35, hun: 1.3, cnt: 1.1 } : { hp: 1, dmg: 1, hun: 1, cnt: .8 }; }

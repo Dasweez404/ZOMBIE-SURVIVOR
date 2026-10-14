@@ -242,6 +242,12 @@ function roofSprite(b) {
   else if (b.w * b.h >= 25) prop(W * (hash2(seed, 1, 1) > .5 ? .65 : .15), H * .18, 0);
   // débord de toit
   c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 3; rrect(c, 1.5, 1.5, W - 3, H - 3, 4); c.stroke(); c.strokeStyle = 'rgba(255,255,255,.14)'; c.lineWidth = 1; rrect(c, 4, 4, W - 8, H - 8, 3); c.stroke();
+  for (const d of b.doors || []) { // marque discrète de l'entrée : seuil sombre + petit auvent clair
+    const horiz = d.s < 2, lx = (d.x - b.x) * TS + 4, ly = (d.y - b.y) * TS + 4, len = TS * 2, dep = 10;
+    const rx = horiz ? lx : (d.s === 2 ? 0 : W - dep), ry = horiz ? (d.s === 0 ? 0 : H - dep) : ly, rw = horiz ? len : dep, rh = horiz ? dep : len;
+    c.fillStyle = 'rgba(24,14,6,.5)'; c.fillRect(rx, ry, rw, rh);
+    c.fillStyle = 'rgba(255,225,170,.3)'; if (horiz) c.fillRect(rx, d.s === 0 ? ry + dep - 1.5 : ry, rw, 1.5); else c.fillRect(d.s === 2 ? rx + dep - 1.5 : rx, ry, 1.5, rh);
+  }
   if (st === 'lighthouse') { // toit circulaire rouge et blanc
     c.clearRect(0, 0, W, H); const R = Math.min(W, H) / 2 - 2; for (let i = 5; i >= 0; i--) { c.fillStyle = i % 2 ? '#f2f2f2' : '#c83a34'; c.beginPath(); c.arc(W / 2, H / 2, R * (i + 1) / 6, 0, TAU); c.fill(); }
     c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 2; c.beginPath(); c.arc(W / 2, H / 2, R, 0, TAU); c.stroke(); gradBall(c, W / 2, H / 2, R * .22, '#fff8c0', '#e0a020'); c.fillStyle = 'rgba(0,0,0,.18)'; c.beginPath(); c.arc(W / 2 + 6, H / 2 + 6, R * .9, 0, TAU); c.fill();
