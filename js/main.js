@@ -82,7 +82,7 @@ function onMouseDown(e) {
   SFX.init();
   if (e.target !== cvs) return;
   if (G.paused) return;
-  if (e.button === 0) { G.lmb = true; G.lmbEdge = true; if (G.buildMode) buildClick(false); }
+  if (e.button === 0) { G.lmb = true; G.lmbEdge = true; if (G.buildMode) { G.lastBT = IDX(Math.floor(G.mouse.x / TS), Math.floor(G.mouse.y / TS)); buildClick(false); } }
   else if (e.button === 2) { G.rmb = true; if (G.buildMode) buildClick(true); }
 }
 function onMouseUp(e) { if (!G) return; if (e.button === 0) G.lmb = false; if (e.button === 2) G.rmb = false; }
@@ -90,8 +90,13 @@ function buildClick(remove) {
   const tx = Math.floor(G.mouse.x / TS), ty = Math.floor(G.mouse.y / TS);
   if (remove) { const s = G.structs.get(IDX(tx, ty)); if (s && !s.free && dist(P.x, P.y, s.x, s.y) < 240) dismantle(s); return; }
   const err = checkPlace(G.buildType, tx, ty);
-  if (err) { if (G.clock - (G.errMsgT || 0) > 1) { msg('Impossible : ' + err, '#ff9a8a'); G.errMsgT = G.clock; } SFX.play('click', .5); return; }
+  if (err) { G.errShakeT = performance.now() / 1000 + .25; if (G.clock - (G.errMsgT || 0) > 1) { msg('Impossible : ' + err, '#ff9a8a'); G.errMsgT = G.clock; } SFX.play('click', .5); return; }
   placeStruct(G.buildType, tx, ty);
+}
+function buildDrag() { // maintenir le clic pour poser en traînant
+  if (!G.buildMode || !G.lmb || G.lmbEdge) { if (!G.lmb) G.lastBT = -1; return; }
+  const tx = Math.floor(G.mouse.x / TS), ty = Math.floor(G.mouse.y / TS), i = IDX(tx, ty); if (i === G.lastBT) return; G.lastBT = i;
+  if (!STRUCTS[G.buildType].solid && G.buildType !== 'plot') return; buildClick(false);
 }
 function onWheel(e) {
   if (!G || !running || G.paused) return;

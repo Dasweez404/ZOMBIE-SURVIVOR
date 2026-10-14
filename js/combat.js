@@ -13,6 +13,14 @@ function blood(m, n, ang) {
   for (let i = 0; i < n; i++) { const a = (ang === undefined ? rnd(0, TAU) : ang + rnd(-.6, .6)), s = rnd(40, 180); addPart(m.x, m.y, Math.cos(a) * s, Math.sin(a) * s, rnd(.25, .6), rnd(1.5, 3), col); }
   if (Math.random() < .5) addDecal(m.x + rnd(-8, 8), m.y + rnd(-8, 8), rnd(3, 7), col);
 }
+function fxRing(x, y, r, col, life) { (G.rings = G.rings || []).push({ x, y, r, life: life || .45, max: life || .45, col: col || '255,235,190' }); if (G.rings.length > 40) G.rings.shift(); }
+function buildFx(s, kind) { // kind: 'place' | 'upgrade' | 'remove'
+  const col = kind === 'remove' ? '#b8a888' : kind === 'upgrade' ? '#ffe28a' : '#e8dcb8';
+  fxRing(s.x, s.y, kind === 'place' ? 26 : 34, kind === 'upgrade' ? '255,226,138' : kind === 'remove' ? '210,190,160' : '255,240,200');
+  for (let i = 0; i < (kind === 'remove' ? 12 : 9); i++) { const a = rnd(0, TAU), v = rnd(40, 110); addPart(s.x + Math.cos(a) * 8, s.y + Math.sin(a) * 8 + 4, Math.cos(a) * v, Math.sin(a) * v * .6 - 10, rnd(.3, .6), rnd(2, 4.5), col); }
+  if (kind === 'upgrade') for (let i = 0; i < 8; i++) addPart(s.x + rnd(-12, 12), s.y + rnd(-6, 10), rnd(-14, 14), rnd(-90, -40), rnd(.5, .9), rnd(1.5, 3), '#fff2b0');
+  shake(kind === 'remove' ? 1.6 : 1.2);
+}
 function shake(a) { G.shake = Math.max(G.shake, a * SET.shake); }
 function hitstop(t) { if (SET.hitstop) G.hitstop = Math.max(G.hitstop, t); }
 function addDmgText(x, y, txt, col, big) { if (SET.dmgNums) addText(x, y, txt, col, big); }
@@ -332,7 +340,7 @@ function placeStruct(type, tx, ty, free) {
   const def = STRUCTS[type], i = IDX(tx, ty);
   if (!free) payItems(costOf(def.cost));
   const old = G.structs.get(i); if (old) removeStructRaw(old);
-  const s = { type, tx, ty, x: tx * TS + 16, y: ty * TS + 16, hp: def.hp, max: def.hp, ang: 0, flash: 0, cd: 0 };
+  const s = { age: free ? 1 : 0, type, tx, ty, x: tx * TS + 16, y: ty * TS + 16, hp: def.hp, max: def.hp, ang: 0, flash: 0, cd: 0 };
   if (type === 'turret') { s.ammo = 0; s.ang = rnd(0, TAU); }
   if (type === 'chest') s.stash = {};
   if (type === 'plot') s.plant = 0;
@@ -340,7 +348,11 @@ function placeStruct(type, tx, ty, free) {
   G.structs.set(i, s);
   if (def.solid) G.solid[i] = def.solid === 4 ? SO.DOOR : SO.STRUCT;
   SFX.play('build'); G.flowDirty = true;
-  if (!free) { G.stats.built++; questEvent('build', s); tutEvent('build'); for (let i = 0; i < 6; i++) addPart(s.x, s.y, rnd(-70, 70), rnd(-70, 70), .35, 2.5, '#d8c8a0'); }
+  if (!free) {
+    G.stats.built++; questEvent('build', s); tutEvent('build'); buildFx(s, old ? 'upgrade' : 'place');
+    const cs = costOf(def.cost); let n = 0; for (const k in cs) { if (n++ > 2) break; addText(s.x + (n - 2) * 14, s.y - 18 - n * 9, '-' + cs[k] + ' ' + ((ITEMS[k] || {}).i || k), '#ffd9a0'); }
+    if (old) addText(s.x, s.y - 34, 'AMÉLIORÉ !', '#ffe28a', true);
+  }
   return s;
 }
 function removeStructRaw(s) {
@@ -352,7 +364,7 @@ function dismantle(s) {
   const def = STRUCTS[s.type]; const frac = .6 * (s.hp / s.max);
   for (const k in def.cost) giveItem(k, Math.max(0, Math.floor(def.cost[k] * frac)), true);
   if (s.stash) for (const k in s.stash) giveItem(k, s.stash[k], true);
-  removeStructRaw(s); SFX.play('build');
+  buildFx(s, 'remove'); addText(s.x, s.y - 20, 'démonté', '#cfc4a8'); removeStructRaw(s); SFX.play('build', .8);
 }
 function damageStruct(s, d) {
   s.hp -= d; s.flash = .15;

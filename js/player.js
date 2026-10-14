@@ -2,7 +2,7 @@
 // ===== Logique du joueur : déplacement, tir, survie, interactions =====
 
 function updatePlayer(dt) {
-  const k = G.keys;
+  const k = G.keys; if (G.buildMode && !G.paused) buildDrag();
   let ix = (k.d ? 1 : 0) - (k.a ? 1 : 0), iy = (k.s ? 1 : 0) - (k.w ? 1 : 0);
   const il = Math.hypot(ix, iy); if (il > 0) { ix /= il; iy /= il; }
   P.moving = il > 0 && !P.veh;

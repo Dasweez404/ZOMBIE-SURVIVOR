@@ -179,13 +179,13 @@ function inSafeZone(x, y) {
 function placePOIs(rng) {
   const W = G.W, H = G.H, cx = W / 2, cy = H / 2;
   const f = wScale(), dk = (WORLD_DENS[G.dens] || WORLD_DENS[1]).k, order = [['village', 1], ['nomads', 1]];
-  const UNIQ = { hospital: 1, police: 1, bunker: 1, legion: 1, radio: 1, market: 1, warehouse: 1, camp: 2, farm: 1, gas: 1, church: 1, school: 1, diner: 1, firestation: 1, lab: 1, lighthouse: 1, prison: 1, trailer: 1, mine: 1, hive: 1, crash: 1, graveyard: 1 };
-  for (const k of ['hospital', 'police', 'prison', 'lab', 'hive', 'mine', 'school', 'firestation', 'church', 'trailer', 'crash', 'graveyard', 'lighthouse', 'diner', 'market', 'warehouse', 'bunker', 'legion', 'camp', 'radio', 'farm', 'gas', 'cabin', 'house']) {
+  const UNIQ = { hospital: 1, police: 1, bunker: 1, legion: 1, radio: 1, market: 1, warehouse: 1, camp: 2, farm: 1, gas: 1, church: 1, school: 1, diner: 1, firestation: 1, lab: 1, lighthouse: 1, prison: 1, trailer: 1, mine: 1, hive: 1, crash: 1, graveyard: 1, funfair: 1, drivein: 1, powerplant: 1, castle: 1 };
+  for (const k of ['hospital', 'castle', 'drivein', 'police', 'prison', 'lab', 'hive', 'mine', 'school', 'firestation', 'church', 'trailer', 'crash', 'funfair', 'powerplant', 'graveyard', 'lighthouse', 'diner', 'market', 'warehouse', 'bunker', 'legion', 'camp', 'radio', 'farm', 'gas', 'cabin', 'house']) {
     if (k === 'nomads') continue;
     const n = Math.max(UNIQ[k] || 4, Math.round(POICOUNT[k] * f * f * dk * (f < 1 ? 1.25 : 1)));
     for (let i = 0; i < n; i++) order.push([k, 1]);
   }
-  const rng_d = { nomads: [18, 40], church: [12, 60], school: [18, 56], diner: [10, 60], firestation: [18, 56], lab: [30, 58], lighthouse: [20, 62], prison: [34, 60], trailer: [14, 60], mine: [26, 60], hive: [46, 64], crash: [20, 62], graveyard: [12, 60], village: [26, 34], hospital: [24, 55], police: [18, 50], market: [20, 55], warehouse: [26, 60], bunker: [46, 64], legion: [44, 64], camp: [24, 58], radio: [34, 62], farm: [16, 60], gas: [12, 60], cabin: [14, 62], house: [8, 64] };
+  const rng_d = { nomads: [18, 40], church: [12, 60], school: [18, 56], diner: [10, 60], firestation: [18, 56], lab: [30, 58], lighthouse: [20, 62], prison: [34, 60], trailer: [14, 60], mine: [26, 60], hive: [46, 64], crash: [20, 62], funfair: [20, 58], drivein: [16, 58], powerplant: [30, 62], castle: [36, 62], graveyard: [12, 60], village: [26, 34], hospital: [24, 55], police: [18, 50], market: [20, 55], warehouse: [26, 60], bunker: [46, 64], legion: [44, 64], camp: [24, 58], radio: [34, 62], farm: [16, 60], gas: [12, 60], cabin: [14, 62], house: [8, 64] };
   let id = 0;
   for (const [type] of order) {
     const def = POITYPES[type]; let placed = false;
@@ -403,6 +403,43 @@ const BUILDERS = {
     for (let i = 0; i < 8; i++) { const x = p.x + rng.int(1, p.w - 2), y = p.y + rng.int(1, p.h - 2); if (freeTile(x, y)) addObj(x, y, 'scrappile'); }
     const c = shuffleArr(freeList(cx - 5, cy - 3, cx + 4, cy + 4).filter(([x, y]) => !(y >= cy - 1 && y <= cy && x >= cx - 2 && x <= cx + 1)), rng); crateRing(p, rng, c);
     p.front = { fx: cx, fy: p.y + p.h + 1, x: cx, y: p.y + p.h }; p.flag = null; setSpots(p, shuffleArr(freeList(p.x + 1, p.y + 1, p.x + p.w - 2, p.y + p.h - 2), rng));
+  },
+  funfair(p, rng) {
+    clearArea(p, 2, T.DIRT); const fx = p.x + 14, fy = p.y + 6, ccx = p.x + 5, ccy = p.y + 7;
+    addObj(fx, fy, 'ferris', { solid: 1 }); addObj(ccx, ccy, 'carousel', { solid: 1 });
+    for (const [dx, dy] of [[2, 2], [6, 2], [10, 2], [3, 11], [9, 11], [17, 11]]) if (freeTile(p.x + dx, p.y + dy)) addObj(p.x + dx, p.y + dy, rng.chance(.5) ? 'stall' : 'tent', { solid: 1 });
+    for (let i = 0; i < 6; i++) { const x = p.x + rng.int(1, p.w - 2), y = p.y + rng.int(1, p.h - 2); if (freeTile(x, y)) addObj(x, y, rng.chance(.5) ? 'scrappile' : 'wreck', { ang: rng.range(0, TAU) }); }
+    const c = shuffleArr(freeList(p.x + 1, p.y + 1, p.x + p.w - 2, p.y + p.h - 2).filter(([x, y]) => Math.hypot(x - fx, y - fy) > 3 && Math.hypot(x - ccx, y - ccy) > 3), rng); crateRing(p, rng, c);
+    p.front = { fx: p.x + 10, fy: p.y + p.h + 1, x: p.x + 10, y: p.y + p.h }; p.flag = null; setSpots(p, shuffleArr(freeList(p.x + 1, p.y + 1, p.x + p.w - 2, p.y + p.h - 2), rng));
+  },
+  drivein(p, rng) {
+    clearArea(p, 2, T.CONC); const sx = p.x + (p.w >> 1);
+    addObj(sx - 1, p.y + 1, 'screenpart', { solid: 1 }); addObj(sx, p.y + 1, 'screen', { solid: 1 }); addObj(sx + 1, p.y + 1, 'screenpart', { solid: 1 });
+    for (const y of [p.y + 5, p.y + 8, p.y + 11]) for (let x = p.x + 2; x < p.x + p.w - 2; x += 3) if (rng.chance(.68) && freeTile(x, y)) addObj(x, y, 'wreck', { ang: Math.PI / 2 + rng.range(-.25, .25) });
+    addObj(p.x + p.w - 3, p.y + 2, 'stall', { solid: 1 }); addObj(p.x + 2, p.y + 2, 'fire', { solid: 0 });
+    const c = shuffleArr(freeList(p.x + 1, p.y + 3, p.x + p.w - 2, p.y + p.h - 2), rng); crateRing(p, rng, c);
+    p.front = { fx: p.x + 10, fy: p.y + p.h + 1, x: p.x + 10, y: p.y + p.h }; p.flag = null; setSpots(p, shuffleArr(freeList(p.x + 1, p.y + 3, p.x + p.w - 2, p.y + p.h - 2), rng));
+  },
+  powerplant(p, rng) {
+    clearArea(p, 2, T.DIRT); const { gx } = ring(p, T.PALI, SO.WALL, 1, 3);
+    const b = makeBuilding(p.x + 2, p.y + 2, 8, 6, T.CONC, rng, { roof: p.def.roof, sides: [1], style: 'plant' }); p.b = b;
+    for (const [dx, dy] of [[12, 2], [15, 2], [12, 6], [15, 6]]) addObj(p.x + dx, p.y + dy, 'pylon', { solid: 1 });
+    for (let i = 0; i < 3; i++) { const x = p.x + rng.int(2, p.w - 3), y = p.y + rng.int(9, p.h - 2); if (freeTile(x, y)) addObj(x, y, 'radbarrel', { solid: 1 }); }
+    const tiles = shuffleArr(interiorTiles(p, b).filter(([x, y]) => G.solid[IDX(x, y)] === 0), rng); crateRing(p, rng, tiles);
+    p.front = { fx: gx + 1, fy: p.y + p.h, x: gx + 1, y: p.y + p.h - 1 }; p.flag = null;
+    setSpots(p, shuffleArr(freeList(p.x + 1, p.y + 8, p.x + p.w - 2, p.y + p.h - 2), rng).concat(tiles));
+  },
+  castle(p, rng) {
+    clearArea(p, 2, T.GRASS); const { gx } = ring(p, T.WALLT, SO.WALL, 1, 3);
+    for (const [x, y] of [[p.x + 1, p.y + 1], [p.x + p.w - 2, p.y + 1], [p.x + 1, p.y + p.h - 2], [p.x + p.w - 2, p.y + p.h - 2]]) addObj(x, y, 'tower', { solid: 1 });
+    for (let y = p.y + 1; y < p.y + p.h - 1; y++) for (let x = p.x + 1; x < p.x + p.w - 1; x++) if (G.solid[IDX(x, y)] === 0) G.tiles[IDX(x, y)] = T.CONC;
+    const b = makeBuilding(p.x + 7, p.y + 2, 8, 6, T.CONC, rng, { roof: p.def.roof, sides: [1], style: 'castle' }); p.b = b;
+    p.front = { fx: gx + 1, fy: p.y + p.h, x: gx + 1, y: p.y + p.h - 1 };
+    const tiles = shuffleArr(interiorTiles(p, b).filter(([x, y]) => G.solid[IDX(x, y)] === 0), rng); crateRing(p, rng, tiles);
+    const cx = p.x + (p.w >> 1), cy = p.y + 12; addObj(cx, cy, 'fire', { solid: 0 });
+    for (const dx of [-5, 5]) if (freeTile(cx + dx, cy - 1)) addObj(cx + dx, cy - 1, 'sandbag', { solid: 1 });
+    p.flag = { tx: cx + 2, ty: cy, x: (cx + 2) * TS + 16, y: cy * TS + 16 };
+    setSpots(p, shuffleArr(freeList(p.x + 1, p.y + 9, p.x + p.w - 2, p.y + p.h - 2), rng).concat(tiles));
   },
   graveyard(p, rng) {
     clearArea(p, 2, T.GRASS); const { gx } = ring(p, T.PALI, SO.WALL, 1, 3);

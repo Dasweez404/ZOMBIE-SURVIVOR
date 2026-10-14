@@ -255,6 +255,10 @@ const LOOT = {
   mine:     [['metal', 9, 3, 8], ['stone', 6, 4, 9], ['scrap', 6, 3, 7], ['powder', 5, 2, 6], ['elec', 3, 1, 3], ['fuel', 3, 1, 3], ['caps', 4, 10, 35]],
   hive:     [['chem', 8, 3, 7], ['sample', 7, 2, 3], ['herb', 5, 2, 5], ['antibio', 4, 1, 3], ['serum', 3, 1, 2], ['rawmeat', 4, 2, 5], ['caps', 5, 25, 70]],
   graveyard:[['cloth', 5, 2, 5], ['herb', 4, 1, 3], ['caps', 6, 8, 30], ['chem', 3, 1, 2], ['seed', 3, 1, 3]],
+  funfair:  [['soda', 7, 1, 3], ['canned', 4, 1, 2], ['caps', 6, 10, 40], ['cloth', 4, 2, 4], ['scrap', 4, 2, 4], ['elec', 3, 1, 3], ['bandage', 3, 1, 2], ['stone', 2, 2, 5]],
+  drivein:  [['soda', 6, 1, 3], ['canned', 5, 1, 3], ['fuel', 5, 1, 3], ['scrap', 5, 2, 5], ['elec', 4, 1, 3], ['a9', 3, 6, 14], ['bandage', 3, 1, 2], ['caps', 4, 8, 30]],
+  powerplant:[['elec', 9, 2, 6], ['metal', 7, 2, 5], ['scrap', 5, 3, 6], ['chem', 5, 1, 3], ['fuel', 5, 2, 4], ['powder', 3, 2, 4], ['antirad', 3, 1, 2], ['caps', 4, 15, 45]],
+  castle:   [['metal', 6, 3, 7], ['stone', 5, 4, 10], ['cloth', 4, 3, 6], ['canned', 4, 2, 4], ['medkit', 3, 1, 2], ['a762', 3, 6, 14], ['shell', 4, 4, 10], ['caps', 6, 25, 70], ['grenade', 2, 1, 2]],
   airdrop:  [['a556', 6, 12, 30], ['a762', 4, 8, 16], ['medkit', 5, 1, 3], ['grenade', 4, 2, 4], ['metal', 5, 4, 8], ['elec', 4, 2, 5], ['canned', 4, 3, 6], ['bottle_clean', 4, 2, 4], ['suppr', 1, 1, 1], ['scope', 1, 1, 1], ['caps', 5, 30, 80]],
 };
 const RARE_LOOT = { // armes / armures / plans trouvables (type, id, poids)
@@ -282,6 +286,10 @@ const RARE_LOOT = { // armes / armures / plans trouvables (type, id, poids)
   mine: [['w', 'pickaxe', 4], ['a', 'helmet_moto', 2], ['m', 'magext', 3], ['p', 'plan_turret', 2]],
   hive: [['a', 'hazmat', 2], ['w', 'flamer', 1], ['m', 'laser', 2], ['p', 'plan_serum', 3], ['p', 'plan_fire', 1]],
   graveyard: [['w', 'club', 2], ['a', 'cap', 3], ['p', 'plan_med', 1]],
+  funfair: [['w', 'bat', 3], ['a', 'cap', 3], ['a', 'jacket', 2]],
+  drivein: [['p', 'plan_vehicle', 3], ['w', 'pistol', 2], ['a', 'jacket', 2], ['a', 'shoes', 2]],
+  powerplant: [['p', 'plan_turret', 4], ['m', 'magext', 3], ['a', 'kevlar', 2], ['p', 'plan_fort', 2]],
+  castle: [['w', 'machete', 3], ['w', 'axe', 3], ['w', 'crossbow', 3], ['a', 'plate', 3], ['a', 'helmet_mil', 2], ['p', 'plan_armor', 3], ['p', 'plan_fort', 2]],
   airdrop: [['w', 'ar', 3], ['w', 'hunter', 2], ['a', 'kevlar', 2], ['a', 'helmet_mil', 2], ['w', 'flamer', 1]],
 };
 
@@ -313,9 +321,13 @@ const POITYPES = {
   crash:     { n: 'Site de crash', size: [16, 12], roof: null, loot: 'airdrop', n_c: [3, 3], z: [6, 9], claim: 0, icon: '✈️', kind: 'crash', mix: [['walker', 40], ['burner', 20], ['toxic', 20], ['zsoldier', 20]] },
   graveyard: { n: 'Cimetière', size: [16, 12], roof: null, loot: 'graveyard', n_c: [2, 2], z: [6, 9], claim: 0, icon: '🪦', kind: 'graveyard', mix: [['walker', 60], ['crawler', 20], ['necro', 8], ['leaper', 12]] },
   nomads:    { n: 'Camp des Nomades', size: [13, 10], roof: null, loot: 'camp', n_c: [1, 1], claim: 0, icon: '⛺', kind: 'nomads', friendly: 1 },
+  funfair:   { n: 'Fête foraine', size: [20, 14], roof: null, loot: 'funfair', n_c: [3, 4], z: [7, 10], claim: 0, icon: '🎡', kind: 'funfair', mix: [['walker', 38], ['runner', 20], ['screamer', 14], ['leaper', 16], ['bloater', 12]], boss: ['brute', 3, 'Le Clown'] },
+  drivein:   { n: 'Ciné drive-in', size: [20, 14], roof: null, loot: 'drivein', n_c: [3, 4], z: [6, 9], claim: 0, icon: '🎬', kind: 'drivein', mix: [['walker', 55], ['crawler', 20], ['runner', 15], ['rats', 10]] },
+  powerplant:{ n: 'Centrale électrique', size: [19, 13], roof: '#6a7480', loot: 'powerplant', n_c: [4, 5], z: [8, 11], claim: 0, icon: '⚡', style: 'plant', kind: 'powerplant', mix: [['zsoldier', 24], ['toxic', 26], ['burner', 20], ['walker', 20], ['brute', 10]] },
+  castle:    { n: 'Château en ruines', size: [21, 16], roof: '#5a5e6a', loot: 'castle', n_c: [4, 5], z: [9, 13], claim: 1, icon: '🏰', style: 'castle', kind: 'castle', mix: [['riot', 24], ['brute', 20], ['walker', 28], ['necro', 10], ['charger', 8], ['leaper', 10]], boss: ['necro', 3.5, 'Seigneur déchu'] },
   radio:     { n: 'Tour radio', size: [9, 8], roof: '#555555', loot: 'radio', n_c: [2, 3], z: [4, 6], claim: 1, icon: '📡' },
 };
-const POICOUNT = { church: 2, school: 1, diner: 2, firestation: 1, lab: 1, lighthouse: 1, prison: 1, trailer: 2, mine: 1, hive: 1, crash: 2, graveyard: 2, nomads: 1, house: 24, cabin: 8, gas: 3, farm: 3, market: 2, police: 1, hospital: 1, warehouse: 2, bunker: 2, camp: 4, legion: 2, radio: 1 };
+const POICOUNT = { church: 2, school: 1, diner: 2, firestation: 1, lab: 1, lighthouse: 1, prison: 1, trailer: 2, mine: 1, hive: 1, crash: 2, graveyard: 2, nomads: 1, funfair: 1, drivein: 1, powerplant: 1, castle: 1, house: 24, cabin: 8, gas: 3, farm: 3, market: 2, police: 1, hospital: 1, warehouse: 2, bunker: 2, camp: 4, legion: 2, radio: 1 };
 
 const BASE_LEVELS = [
   null,
@@ -355,6 +367,7 @@ const QUESTS = [
   { id: 'q_church', giver: 'doc', req: ['q_hosp'], title: 'Les âmes perdues', desc: 'Une église abandonnée est devenue le repaire de nécromanciens. Purge-la : le Docteur Lin veut y récupérer des herbes et des remèdes.', objs: [{ t: 'clear', poi: 'church' }], rew: { items: { medkit: 2, antirad: 3 }, caps: 120, rep: 12, xp: 180 } },
   { id: 'q_lab', giver: 'doc', req: ['q_hosp'], title: 'Laboratoire secret', desc: 'Des chercheurs ont fui un laboratoire au cœur de la zone contaminée. Rapporte 3 échantillons biologiques (équipe-toi contre les radiations !).', objs: [{ t: 'have', item: 'sample', n: 3 }], rew: { items: { plan_serum: 1, antirad: 4, hazmat: 1 }, caps: 200, rep: 18, xp: 300 } },
   { id: 'q_prison', giver: 'mara', req: ['q_camp'], title: 'Évasion', desc: 'Des gardiens infectés tiennent la prison. Reprends-la : ses armureries valent de l\'or.', objs: [{ t: 'clear', poi: 'prison' }], rew: { items: { shotgun: 1, kevlar: 1, shell: 30 }, caps: 220, rep: 20, xp: 350 } },
+  { id: 'q_castle', giver: 'mara', req: ['q_prison'], title: 'Le Seigneur déchu', desc: 'Un château en ruines abrite un seigneur mort-vivant et sa garde. Prends la forteresse : ses murs feront une base exceptionnelle.', objs: [{ t: 'clear', poi: 'castle' }], rew: { items: { plate: 1, crossbow: 1, metal: 20 }, caps: 350, rep: 28, xp: 550 } },
   { id: 'q_hive', giver: 'mara', req: ['q_legion'], title: 'Le Nid', desc: 'Une ruche monstrueuse prolifère au loin. Détruis le nid et sa reine avant que les essaims n\'atteignent le fort.', objs: [{ t: 'clear', poi: 'hive' }], rew: { items: { flamer: 1, plan_fire: 1, medkit: 3 }, caps: 500, rep: 35, xp: 700 } },
   { id: 'q_night', giver: 'mara', req: ['q_build'], title: 'La longue nuit', desc: 'Survis jusqu\'au jour 8 avec une base de niveau 3.', objs: [{ t: 'survive', day: 8 }, { t: 'baselvl', n: 3 }], rew: { items: { plan_fire: 1, kevlar: 1, medkit: 3 }, caps: 300, rep: 25, xp: 300 } },
   { id: 'q_bunker', giver: 'mara', req: ['q_legion'], title: 'Le Bunker', desc: 'Les militaires ont laissé un bunker bourré d\'armes. Prends-le et nettoie-le.', objs: [{ t: 'clear', poi: 'bunker' }], rew: { items: { plate: 1, hunter: 1, a762: 30 }, caps: 400, rep: 30, xp: 500 } },

@@ -56,7 +56,7 @@ function render(time) {
   drawDecals(c, cx, cy);
   drawBuildingShadows(c, cx, cy);
   drawObjs(c, cx, cy, time);
-  drawStructs(c, cx, cy, time);
+  drawStructs(c, cx, cy, time); drawRings(c);
   drawRadZones(c, cx, cy, time);
   drawMinesThrown(c, time);
   drawPickups(c, time);
@@ -143,12 +143,25 @@ function drawTexts(c) {
   c.globalAlpha = 1;
 }
 function drawBuildGhost(c) {
-  const tx = Math.floor(G.mouse.x / TS), ty = Math.floor(G.mouse.y / TS);
-  const err = checkPlace(G.buildType, tx, ty); G.buildErr = err;
-  c.fillStyle = err ? 'rgba(255,60,60,.4)' : 'rgba(80,255,120,.4)'; c.fillRect(tx * TS, ty * TS, TS, TS);
-  c.strokeStyle = err ? '#f55' : '#6f8'; c.lineWidth = 2; c.strokeRect(tx * TS + 1, ty * TS + 1, TS - 2, TS - 2);
-  c.font = '18px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText(STRUCTS[G.buildType].i, tx * TS + 16, ty * TS + 16); c.textBaseline = 'alphabetic';
-  if (G.buildType === 'turret') { c.strokeStyle = 'rgba(255,255,255,.3)'; c.setLineDash([4, 4]); c.beginPath(); c.arc(tx * TS + 16, ty * TS + 16, 340, 0, TAU); c.stroke(); c.setLineDash([]); }
+  const tx = Math.floor(G.mouse.x / TS), ty = Math.floor(G.mouse.y / TS), t = performance.now() / 1000;
+  const err = checkPlace(G.buildType, tx, ty); G.buildErr = err; const def = STRUCTS[G.buildType], cx = tx * TS + 16, cy = ty * TS + 16;
+  // grille discrète autour du curseur
+  c.save(); c.lineWidth = 1;
+  for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) { const d = Math.hypot(dx, dy); if (d > 3.2) continue; c.strokeStyle = 'rgba(255,255,255,' + (.11 * (1 - d / 3.4)) + ')'; c.strokeRect((tx + dx) * TS + .5, (ty + dy) * TS + .5, TS - 1, TS - 1); }
+  // portée de pose
+  c.strokeStyle = 'rgba(255,255,255,.07)'; c.setLineDash([3, 7]); c.beginPath(); c.arc(P.x, P.y, 230, 0, TAU); c.stroke(); c.setLineDash([]);
+  const col = err ? '255,90,80' : '110,255,150', pulse = .5 + Math.sin(t * 6) * .5, sh = err && G.errShakeT > t ? Math.sin(t * 90) * 2 : 0;
+  c.fillStyle = 'rgba(' + col + ',' + (.14 + pulse * .1) + ')'; c.fillRect(tx * TS + sh, ty * TS, TS, TS);
+  c.strokeStyle = 'rgba(' + col + ',.9)'; c.lineWidth = 2;
+  const L = 8, x0 = tx * TS + 1 + sh, y0 = ty * TS + 1, x1 = x0 + TS - 2, y1 = y0 + TS - 2, o = pulse * 2; // coins animés
+  c.beginPath(); for (const [x, y, sx, sy] of [[x0 - o, y0 - o, 1, 1], [x1 + o, y0 - o, -1, 1], [x0 - o, y1 + o, 1, -1], [x1 + o, y1 + o, -1, -1]]) { c.moveTo(x + sx * L, y); c.lineTo(x, y); c.lineTo(x, y + sy * L); } c.stroke();
+  if (def.i && G.buildType !== 'campfire') { c.globalAlpha = err ? .4 : .65; blit(c, structSprite(G.buildType), cx + sh, cy - 2 + Math.sin(t * 4) * 1.5, 0, 1 + pulse * .04); c.globalAlpha = 1; }
+  else { c.font = '18px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.globalAlpha = .8; c.fillText(def.i, cx, cy); c.globalAlpha = 1; c.textBaseline = 'alphabetic'; }
+  // survol d'une structure existante : démontage / amélioration
+  const ex = G.structs.get(IDX(tx, ty));
+  if (ex && !ex.free) { c.font = 'bold 10px sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.7)'; const tt = err ? 'clic droit : démonter' : 'clic : améliorer'; c.strokeText(tt, cx, ty * TS - 6); c.fillStyle = err ? '#ffc890' : '#ffe28a'; c.fillText(tt, cx, ty * TS - 6); }
+  if (G.buildType === 'turret') { c.strokeStyle = 'rgba(255,255,255,.3)'; c.setLineDash([4, 4]); c.lineDashOffset = -t * 12; c.beginPath(); c.arc(cx, cy, 340, 0, TAU); c.stroke(); c.setLineDash([]); c.lineDashOffset = 0; }
+  c.restore();
   // aperçu des bases
   for (const p of G.pois) if (p.owned) { c.strokeStyle = 'rgba(100,255,150,.25)'; c.setLineDash([8, 8]); c.beginPath(); c.arc(p.cx, p.cy, p.baseR, 0, TAU); c.stroke(); c.setLineDash([]); }
 }
