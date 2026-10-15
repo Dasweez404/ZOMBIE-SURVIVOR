@@ -47,7 +47,7 @@ function renderPanel() {
 }
 function itemDesc(id) {
   const it = ITEMS[id], p = [it.n, 'Poids ' + it.w + ' kg · valeur ' + (it.v || 1)];
-  if (it.use) { const u = it.use, e = []; if (u.hun) e.push('+' + u.hun + ' faim'); if (u.thi) e.push('+' + u.thi + ' soif'); if (u.hp) e.push('+' + u.hp + ' PV'); if (u.stam) e.push('+' + u.stam + ' endurance'); if (u.temp) e.push('+' + u.temp + ' chaleur'); if (u.rad) e.push(u.rad + ' radiation'); if (u.cure) e.push('soigne : ' + u.cure.join(', ')); if (u.sick) e.push('risque d\'intoxication ' + Math.round(u.sick * 100) + ' %'); p.push(e.join(' · ')); }
+  if (it.use) { const u = it.use, e = []; if (u.hun) e.push('+' + u.hun + ' faim'); if (u.thi) e.push('+' + u.thi + ' soif'); if (u.hp) e.push('+' + u.hp + ' PV'); if (u.stam) e.push('+' + u.stam + ' endurance'); if (u.buff) e.push(u.buff.n + ' ' + u.buff.t + ' s' + (u.buff.spd ? ' (vitesse +' + Math.round(u.buff.spd * 100) + '%)' : '') + (u.buff.dmg ? ' (dégâts +' + Math.round(u.buff.dmg * 100) + '%)' : '')); if (u.temp) e.push('+' + u.temp + ' chaleur'); if (u.rad) e.push(u.rad + ' radiation'); if (u.cure) e.push('soigne : ' + u.cure.join(', ')); if (u.sick) e.push('risque d\'intoxication ' + Math.round(u.sick * 100) + ' %'); p.push(e.join(' · ')); }
   if (it.t === 'ammo') p.push('Munition'); if (it.t === 'gadget') p.push('Gadget : touches G / F'); if (it.t === 'mod') p.push('Module d\'arme (onglet Améliorations)'); if (it.t === 'plan') p.push('Apprendre pour débloquer des recettes');
   return p.join('\n');
 }
@@ -78,25 +78,33 @@ function invHTML() {
     } else h += '<div class="item empty">' + (i + 1) + '. — emplacement vide —</div>';
   });
   h += '</div><h3>Armure</h3><div class="list">';
-  for (const slot of ['head', 'body', 'feet']) {
-    const g = P.armor[slot], nm = { head: 'Tête', body: 'Torse', feet: 'Pieds' }[slot];
+  for (const slot of ['head', 'body', 'hands', 'feet', 'back']) {
+    const g = P.armor[slot], nm = { head: 'Tête', body: 'Torse', hands: 'Mains', feet: 'Pieds', back: 'Dos' }[slot];
     h += g ? '<div class="item gear"><span class="ic">' + ARMOR[g.id].i + '</span><span class="nm">' + nm + ' : ' + esc(gearName(g)) + '<br><small>Armure ' + (ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1))).toFixed(1) + armorExtra(g) + '</small></span><button class="sm" data-act="unarmor" data-a="' + slot + '">Retirer</button></div>' : '<div class="item empty">' + nm + ' : —</div>';
   }
   h += '<p class="mut">Chaleur : +' + armorWarmth().toFixed(0) + ' · Protection radiation : ' + Math.round(radResist() * 100) + '%</p><p class="mut">Armure totale : ' + armorValue().toFixed(1) + ' → réduction ' + Math.round(armorValue() / (armorValue() + 30) * 100) + '% des dégâts</p>';
   h += '<h3>Réserve d\'équipement</h3><div class="list">';
   if (!P.gear.length) h += '<p class="mut">Aucun équipement en réserve.</p>';
   P.gear.forEach((g, i) => {
-    h += '<div class="item gear"><span class="ic">' + gearIcon(g) + '</span><span class="nm">' + esc(gearName(g)) + (g.kind === 'a' ? '<br><small>Armure ' + (ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1))).toFixed(1) + '</small>' : '<br><small>' + gunStatText(g) + '</small>') + '</span><button data-act="equip" data-a="' + i + '">Équiper</button><button class="sm" data-act="dropgear" data-a="' + i + '">🗑</button></div>';
+    h += '<div class="item gear"><span class="ic">' + gearIcon(g) + '</span><span class="nm">' + esc(gearName(g)) + (g.kind === 'a' ? '<br><small>Armure ' + (ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1))).toFixed(1) + armorExtra(g) + '</small>' : '<br><small>' + gunStatText(g) + '</small>') + '</span><button data-act="equip" data-a="' + i + '">Équiper</button><button class="sm" data-act="dropgear" data-a="' + i + '">🗑</button></div>';
   });
   h += '</div></div></div>';
   return h;
 }
-function armorExtra(g) { const a = ARMOR[g.id]; return ' · 🔥 chaleur +' + (a.warm || 0) + (a.rad ? ' · ☢️ -' + Math.round(a.rad * 100) + '% radiation' : ''); }
+function armorExtra(g) {
+  const a = ARMOR[g.id], e = [' · 🔥 chaleur +' + (a.warm || 0)];
+  if (a.rad) e.push('☢️ -' + Math.round(a.rad * 100) + '% radiation'); if (a.fire) e.push('🧯 -' + Math.round(a.fire * 100) + '% feu'); if (a.wet) e.push('💧 -' + Math.round(a.wet * 100) + '% humidité');
+  if (a.spd) e.push('👟 vitesse ' + (a.spd > 0 ? '+' : '') + Math.round(a.spd * 100) + '%'); if (a.carry) e.push('🎒 +' + a.carry + ' kg'); if (a.stealth) e.push('🥷 discrétion +' + Math.round(a.stealth * 100) + '%');
+  if (a.melee) e.push('⚔️ mêlée +' + Math.round(a.melee * 100) + '%'); if (a.reload) e.push('🔄 rechargement +' + Math.round(a.reload * 100) + '%'); if (a.harvest) e.push('⛏️ récolte +' + Math.round(a.harvest * 100) + '%');
+  if (a.regen) e.push('❤️ +' + a.regen + ' PV/s'); if (a.stam) e.push('⚡ +' + a.stam + ' endurance'); if (a.hp) e.push('+' + a.hp + ' PV max'); if (a.nvg) e.push('🌙 vision nocturne');
+  return e.join(' · ');
+}
 function durHTML(w) { const d = Math.round(durOf(w)), col = d > 50 ? '#8ad08a' : d > 25 ? '#e8b850' : '#ff6a5a'; return '<span class="dur" title="Usure"><i style="width:' + d + '%;background:' + col + '"></i></span> <small style="color:' + col + '">' + d + '%</small>'; }
 function gunStatText(w) {
   const b = WEAPONS[w.id], s = wstat(w);
-  if (b.melee) return 'Dégâts ' + s.dmg.toFixed(0) + ' · cadence ' + (1 / s.rate).toFixed(1) + '/s · portée ' + s.range;
-  return 'Dégâts ' + s.dmg.toFixed(0) + (s.pellets ? '×' + s.pellets : '') + ' · ' + (1 / s.rate).toFixed(1) + ' tirs/s · portée ' + Math.round(s.range) + ' · dispersion ' + (s.spr * 57.3).toFixed(1) + '° · ' + ITEMS[b.ammo].n + ' (' + w.mag + '/' + s.mag + ')';
+  const fl = []; if (s.burst) fl.push('rafales ×' + s.burst); if (s.expl) fl.push('explosif'); if (s.stun) fl.push('étourdit'); if (s.ignite) fl.push('incendiaire'); if (s.acid) fl.push('acide'); if (s.bleed) fl.push('saignement'); if (s.energy) fl.push('énergie'); if (s.pierce) fl.push('perce ×' + s.pierce); if (s.heavy) fl.push('lourde'); if (s.fuelUse) fl.push('carburant'); const flt = fl.length ? ' · ' + fl.join(', ') : '';
+  if (b.melee) return 'Dégâts ' + s.dmg.toFixed(0) + ' · cadence ' + (1 / s.rate).toFixed(1) + '/s · portée ' + s.range + flt;
+  return 'Dégâts ' + s.dmg.toFixed(0) + (s.pellets ? '×' + s.pellets : '') + ' · ' + (1 / s.rate).toFixed(1) + ' tirs/s · portée ' + Math.round(s.range) + ' · dispersion ' + (s.spr * 57.3).toFixed(1) + '° · ' + ITEMS[b.ammo].n + ' (' + w.mag + '/' + s.mag + ')' + flt;
 }
 function craftHTML() {
   const cats = [...new Set(RECIPES.map(r => r.cat))];
@@ -140,7 +148,7 @@ function modsHTML() {
     if (!b.melee && b.mods.length) {
       h += '<div class="slots">';
       for (const sl of b.mods) {
-        const cur = w.att[sl]; const names = { sight: 'Viseur', muzzle: 'Bouche', mag: 'Chargeur', laser: 'Laser' };
+        const cur = w.att[sl]; const names = { sight: 'Viseur', muzzle: 'Bouche', mag: 'Chargeur', laser: 'Laser', grip: 'Poignée', barrel: 'Canon', ammo: 'Munitions spéciales' };
         h += '<div class="slot"><b>' + names[sl] + ' :</b> ';
         if (cur) h += ITEMS[cur].i + ' ' + esc(ITEMS[cur].n) + ' <button class="sm" data-act="detach" data-a="' + ref + ':' + sl + '">Retirer</button>';
         else {

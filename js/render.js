@@ -115,7 +115,7 @@ function drawMinesThrown(c, time) {
     const z = g.z || 0;
     c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(g.x, g.y + 3, 5, 3, 0, 0, TAU); c.fill();
     if (g.state === 'flare') { c.fillStyle = '#ff5050'; c.beginPath(); c.arc(g.x, g.y, 3, 0, TAU); c.fill(); continue; }
-    c.fillStyle = g.k === 'grenade' ? '#4a6a3a' : g.k === 'molotov' ? '#8a5a2a' : g.k === 'flare' ? '#c33' : '#d33';
+    c.fillStyle = { grenade: '#4a6a3a', molotov: '#8a5a2a', flare: '#c33', smoke: '#aab', flash: '#fff', cluster: '#6a4a3a', gas: '#9acd32', incend: '#e07a2a', decoy: '#4aa', beacon: '#e33' }[g.k] || '#d33';
     c.beginPath(); c.arc(g.x, g.y - z, 5, 0, TAU); c.fill();
   }
 }
@@ -200,7 +200,7 @@ function lightAt(lc, x, y, r, a, col) {
   lc.fillStyle = g; lc.beginPath(); lc.arc(x, y, r, 0, TAU); lc.fill();
 }
 function drawLighting(c, cx, cy, time) {
-  const d = G.dark;
+  const nv = armorSum('nvg') > 0, d = G.dark * (nv ? .42 : 1);
   if (d < .02) { // lueur de crépuscule / aube
     return;
   }

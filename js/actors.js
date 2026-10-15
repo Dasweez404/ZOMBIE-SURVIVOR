@@ -4,7 +4,7 @@
 function newPlayer() {
   const p = {
     x: G.spawn.x, y: G.spawn.y, r: 12, hp: 100, hun: 100, thi: 100, stam: 100, ang: 0, vx: 0, vy: 0,
-    inv: {}, gear: [], slots: [null, null, null, null, null], sel: 0, armor: { head: null, body: null, feet: null }, pack: 0,
+    inv: {}, gear: [], slots: [null, null, null, null, null], sel: 0, armor: { head: null, body: null, hands: null, feet: null, back: null }, pack: 0,
     known: {}, skills: { str: 0, end: 0, aim: 0, craft: 0, hunt: 0, carry: 0 }, sp: 0, lvl: 1, xp: 0,
     bleed: 0, infect: 0, sick: 0, temp: 50, rad: 0, wet: 0, slowT: 0, veh: null, burn: 0, painT: 0, cd: 0, reload: 0, reloading: false, bloom: 0, swing: 0, swingA: 0, hurtT: 0,
     gadSel: 0, gadCd: 0, rep: 0, dead: false, flashT: 0, useCd: 0, noiseT: 0, sprint: false, moving: false, healCd: 0, mealCd: 0, lastHurt: -99,
@@ -66,7 +66,7 @@ function mobTarget(m, range) { // cible la plus proche : joueur ou allié
 function steer(m, tx, ty, speed, dt, useFlow) {
   let dx = tx - m.x, dy = ty - m.y; const d = Math.hypot(dx, dy) || 1;
   m.losT -= dt;
-  if (m.losT <= 0) { m.losT = .25 + Math.random() * .1; m.los = d < 600 && los(m.x, m.y, tx, ty); }
+  if (m.losT <= 0) { m.losT = .25 + Math.random() * .1; m.los = d < 600 && los(m.x, m.y, tx, ty) && !smokeCovers(tx, ty); }
   let vx = dx / d, vy = dy / d;
   if (!m.los && d > 40) {
     const fl = m.assault ? G.flowB : G.flowP; const dir = fl && fl.dir(m.x, m.y);
@@ -102,6 +102,7 @@ function updateMob(m, dt) {
   if (m.kx || m.ky) { moveEnt(m, m.kx * dt, m.ky * dt, false); m.kx *= Math.max(0, 1 - dt * 9); m.ky *= Math.max(0, 1 - dt * 9); if (Math.abs(m.kx) < 3 && Math.abs(m.ky) < 3) { m.kx = 0; m.ky = 0; } }
   m.breaking = m.breaking && G.structs.has(IDX(m.breaking.tx, m.breaking.ty)) ? m.breaking : null;
   const f = m.def.fac;
+  if (m.stun > 0 && f !== 'undead') { m.stun -= dt; return; }
   if (f === 'undead') updateUndead(m, dt);
   else if (m.def.human) updateHuman(m, dt);
   else updateAnimal(m, dt);
@@ -243,7 +244,7 @@ function updateHuman(m, dt) {
   const range = Math.min(w.range, 520);
   if (m.alertT > 0) m.alertT -= dt;
   let tgt = mobTarget(m, range + 40);
-  if (tgt && !los(m.x, m.y, tgt.x, tgt.y)) tgt = null;
+  if (tgt && (!los(m.x, m.y, tgt.x, tgt.y) || smokeCovers(tgt.x, tgt.y))) tgt = null;
   if (tgt && m.state === 'idle') { m.state = 'combat'; m.alertT = 8; for (const n of G.mobs) if (!n.dead && n.def.fac === def.fac && n.state === 'idle' && dist(n.x, n.y, m.x, m.y) < 300) { n.state = 'combat'; n.alertT = 8; } }
   if (m.assault && !tgt) { const p = G.pois[m.assault]; if (p && p.owned) { const d = steer(m, p.flag.x, p.flag.y, m.spd, dt); if (d < 200) { m.cd -= dt; if (m.cd <= 0) { m.cd = 1; damageFlag(p, 8); } } breakStructs(m, dt); return; } }
   if (m.state === 'combat') {

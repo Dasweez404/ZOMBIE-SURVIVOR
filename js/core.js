@@ -12,7 +12,7 @@ function msg(text, col) {
 }
 function invCount(id) { return P.inv[id] || 0; }
 function invWeight() { let w = 0; for (const k in P.inv) w += (ITEMS[k] ? ITEMS[k].w : 0) * P.inv[k]; return w; }
-function invCap() { return 40 + P.pack * 22 + P.skills.carry * 8; }
+function invCap() { return 40 + P.pack * 22 + P.skills.carry * 8 + armorSum('carry'); }
 function invAdd(id, n) {
   n = Math.floor(n); if (n <= 0) return 0;
   const it = ITEMS[id]; if (!it) return 0;
@@ -63,18 +63,18 @@ function wstat(inst) {
   const q = Math.min(1, durOf(inst) / 100), wear = q < .5 ? .5 - q : 0; // usure : au-dessous de 50 %
   if (wear) { o.dmg *= 1 - wear * .6; o.rate *= 1 + wear * .5; }
   if (b.melee) {
-    o.dmg *= 1 + .12 * P.skills.str;
+    o.dmg *= 1 + .12 * P.skills.str + armorSum('melee') + buffOf('dmg');
     return o;
   }
   o.mag = Math.round(b.mag * (1 + (lv >= 2 ? .2 : 0)));
   o.spr = b.spr * (1 - .08 * P.skills.aim) * (1 - .04 * lv) * (1 + wear * 1.2);
-  o.rel = b.rel * (1 - .07 * P.skills.aim);
+  o.rel = b.rel * (1 - .07 * P.skills.aim) * (1 - Math.min(.4, armorSum('reload'))); o.dmg *= 1 + buffOf('dmg');
   o.noiseR = b.noise; o.zoom = 0; o.laser = 0;
   for (const slot in inst.att) {
     const e = MOD_EFFECT[inst.att[slot]]; if (!e) continue;
     if (e.range) o.range *= e.range; if (e.spr) o.spr *= e.spr; if (e.noise) o.noiseR *= e.noise;
     if (e.dmg) o.dmg *= e.dmg; if (e.mag) o.mag = Math.ceil(o.mag * e.mag);
-    if (e.zoom) o.zoom = 1; if (e.laser) o.laser = 1;
+    if (e.zoom) o.zoom = 1; if (e.laser) o.laser = 1; if (e.rel) o.rel *= e.rel; if (e.pierce) o.pierce = (o.pierce || 0) + e.pierce; if (e.ignite) o.ignite = 1;
   }
   if (b.scoped) o.zoom = 1;
   o.silenced = o.noiseR < b.noise * .5;
@@ -101,21 +101,23 @@ function giveGear(kind, id, silent) {
   else if (kind === 'm') giveItem(id, 1, silent);
   else if (kind === 'p') giveItem(id, 1, silent);
 }
+function armorSum(prop) { let a = 0; for (const s in P.armor) { const g = P.armor[s]; if (g && ARMOR[g.id][prop]) a += ARMOR[g.id][prop]; } return a; }
+function buffOf(k) { return P.buff && P.buff.t > 0 ? (P.buff[k] || 0) : 0; }
 function armorValue() {
   let a = 0;
   for (const s in P.armor) { const g = P.armor[s]; if (g) a += ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1)); }
   return a;
 }
 function moveSpeedMul() {
-  let m = 1; const f = P.armor.feet; if (f) m += ARMOR[f.id].spd || 0;
+  let m = 1 + armorSum('spd') + buffOf('spd');
   const w = invWeight() / invCap(); if (w > .85) m -= (w - .85) * 1.2;
   return Math.max(.6, m);
 }
-function maxHPBase() { return 100 + P.skills.end * 10 + (P.lvl - 1) * 2; }
+function maxHPBase() { return 100 + P.skills.end * 10 + (P.lvl - 1) * 2 + armorSum('hp'); }
 function maxHP() { return Math.max(20, maxHPBase() * (1 - (P.rad || 0) / 160)); }
 function armorWarmth() { let a = 0; for (const s in P.armor) { const g = P.armor[s]; if (g) a += (ARMOR[g.id].warm || 0) * (1 + .1 * (g.lvl - 1)); } return a; }
 function radResist() { let k = 1; for (const s in P.armor) { const g = P.armor[s]; if (g && ARMOR[g.id].rad) k *= 1 - ARMOR[g.id].rad; } if (P.veh && P.veh.def.closed) k *= .5; return 1 - k; }
-function maxStam() { return 100 + P.skills.end * 12; }
+function maxStam() { return 100 + P.skills.end * 12 + armorSum('stam'); }
 
 // ===== XP / niveaux =====
 function xpNeed(l) { return Math.round(50 * Math.pow(l, 1.5)); }

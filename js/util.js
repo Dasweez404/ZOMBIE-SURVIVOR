@@ -115,6 +115,8 @@ const SFX = {
       case 'rifle': this.noise(.22, .6 * v, 4500, 200); this.tone('sawtooth', 160, 40, .18, .2 * v); break;
       case 'shotgun': this.noise(.3, .8 * v, 3500, 120); this.tone('sawtooth', 120, 30, .25, .3 * v); break;
       case 'silenced': this.noise(.07, .15 * v, 1800, 300); break;
+      case 'zap': this.tone('sawtooth', 1400, 200, .14, .14 * v); this.noise(.05, .1 * v, 6000, 2000); break;
+      case 'rocket': this.noise(.5, .5 * v, 1800, 100); this.tone('sawtooth', 200, 60, .4, .3 * v); break;
       case 'bow': this.tone('triangle', 500, 150, .12, .15 * v); this.noise(.06, .1 * v, 3000, 800); break;
       case 'flame': this.noise(.12, .3 * v, 1800, 600); break;
       case 'swing': this.noise(.1, .18 * v, 2500, 600); break;

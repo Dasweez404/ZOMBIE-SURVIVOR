@@ -52,6 +52,7 @@ function makeNoise(x, y, R, fromPlayer) {
 function spawnBullet(o) {
   G.bullets.push(Object.assign({ pierce: 0, hit: null, r: 3, team: 'f', kind: 'b', crit: false, px: o.x, py: o.y }, o));
 }
+function smokeCovers(x, y) { for (const k of G.clouds) if (k.kind === 'smoke' && dist(k.x, k.y, x, y) < k.r) return true; return false; }
 function hostileMob(m) { return !m.dead && (m.def.fac !== 'wild' || m.aggro); }
 
 function updateBullets(dt) {
@@ -75,8 +76,11 @@ function updateBullets(dt) {
           if (b.hit && b.hit.has(m)) continue;
           if (Math.hypot(m.x - b.x, m.y - b.y) < m.r + b.r) {
             if (b.hit) b.hit.add(m);
+            if (b.expl) { dead = true; break; }
             hurtMob(m, b.dmg, { kind: b.flame ? 'fire' : 'bullet', ang: Math.atan2(b.vy, b.vx), kb: b.flame ? 0 : 30, crit: b.crit, src: b.src || 'p' });
-            if (b.flame) m.burn = Math.max(m.burn || 0, 3);
+            if (b.flame || (b.ignite && !m.def.fireproof)) m.burn = Math.max(m.burn || 0, 3);
+            if (b.stun) { m.stun = Math.max(m.stun || 0, b.stun); addText(m.x, m.y - 18, '⚡', '#9fe8ff'); }
+            if (b.acid) m.bleedT = Math.max(m.bleedT || 0, 4);
             if (b.pierce > 0) { b.pierce--; b.dmg *= .75; } else { dead = true; break; }
           }
         }
@@ -92,7 +96,8 @@ function updateBullets(dt) {
         }
       }
     }
-    if (dead) bl.splice(i, 1);
+    if (!dead && b.expl && Math.random() < .6) addPart(b.x, b.y, rnd(-15, 15), rnd(-15, 15), .5, rnd(2, 4), 'rgba(200,200,200,.6)', 'dot');
+    if (dead) { if (b.expl && b.team === 'f') { explode(b.x, b.y, b.expl, b.dmg, { team: 'f', cause: 'votre explosif', fire: b.expl > 100 && false }); makeNoise(b.x, b.y, 1000); } bl.splice(i, 1); }
   }
 }
 
@@ -197,8 +202,9 @@ function updateClouds(dt) {
     const k = G.clouds[i]; k.life -= dt; k.tick -= dt;
     if (k.tick <= 0) {
       k.tick = .4;
-      if (!P.dead && dist(k.x, k.y, P.x, P.y) < k.r + 8) { if (k.kind === 'rad') P.rad = Math.min(100, P.rad + 1.6 * (1 - radResist())); else { hurtPlayer(1.4, { pure: true, infect: .02, cause: 'un nuage toxique' }); P.slowT = Math.max(P.slowT, .6); } }
-      for (const f of G.friends) if (!f.dead && dist(k.x, k.y, f.x, f.y) < k.r) hurtFriend(f, 1.2);
+      if (k.kind === 'gas') for (const m of G.mobs) if (!m.dead && dist(k.x, k.y, m.x, m.y) < k.r) { hurtMob(m, 5 + G.day * .2, { kind: 'gas', ang: 0 }); if (Math.random() < .3) addText(m.x, m.y - 14, '☣', '#9acd32'); }
+      if (k.kind === 'smoke') { /* aucun dégât */ } else if (!P.dead && dist(k.x, k.y, P.x, P.y) < k.r + 8) { if (k.kind === 'rad') P.rad = Math.min(100, P.rad + 1.6 * (1 - radResist())); else { hurtPlayer(1.4, { pure: true, infect: .02, cause: 'un nuage toxique' }); P.slowT = Math.max(P.slowT, .6); } }
+      if (k.kind !== 'smoke') for (const f of G.friends) if (!f.dead && dist(k.x, k.y, f.x, f.y) < k.r) hurtFriend(f, 1.2);
     }
     if (k.life <= 0) G.clouds.splice(i, 1);
   }
@@ -236,6 +242,7 @@ function updateFires(dt) {
 }
 function updateBurning(dt) {
   for (const m of G.mobs) {
+    if (!m.dead && m.bleedT > 0) { m.bleedT -= dt; m.bleedTick = (m.bleedTick || 0) - dt; if (m.bleedTick <= 0) { m.bleedTick = .5; hurtMob(m, 4 + G.day * .2, { kind: 'bleed', ang: 0 }); addPart(m.x, m.y, rnd(-20, 20), rnd(-20, 20), .4, 2, '#9ae83a', 'dot'); } }
     if (m.dead || !(m.burn > 0)) continue;
     m.burn -= dt; m.burnTick = (m.burnTick || 0) - dt;
     if (Math.random() < dt * 14) addPart(m.x + rnd(-6, 6), m.y + rnd(-6, 6), rnd(-10, 10), rnd(-50, -20), .4, rnd(2, 4), pick(['#ff7a1a', '#ffb02a']), 'fire');
@@ -243,7 +250,7 @@ function updateBurning(dt) {
   }
   if (P.burn > 0) {
     P.burn -= dt; P.burnTick = (P.burnTick || 0) - dt;
-    if (P.burnTick <= 0) { P.burnTick = .5; hurtPlayer(3, { pure: true, cause: 'les flammes' }); }
+    if (P.burnTick <= 0) { P.burnTick = .5; hurtPlayer(3 * (1 - Math.min(.9, armorSum('fire'))), { pure: true, cause: 'les flammes' }); }
     if (Math.random() < dt * 12) addPart(P.x + rnd(-6, 6), P.y + rnd(-6, 6), rnd(-10, 10), rnd(-50, -20), .4, rnd(2, 4), '#ff9a2a', 'fire');
   }
 }
@@ -259,6 +266,16 @@ function useGadget() {
   if (kind === 'mine') {
     invTake(id, 1); G.mines.push({ x: P.x, y: P.y, arm: 1.6 }); msg('Mine posée (armée dans 1,5 s).', '#ffd070'); SFX.play('click'); return;
   }
+  if (kind === 'trap') { invTake(id, 1); G.mines.push({ x: P.x, y: P.y, arm: 1, trap: true }); msg('Piège à loups posé.', '#ffd070'); SFX.play('click'); return; }
+  if (kind === 'sentry') {
+    let tx = Math.floor(G.mouse.x / TS), ty = Math.floor(G.mouse.y / TS); if (dist(P.x, P.y, tx * TS + 16, ty * TS + 16) > 170) { tx = Math.floor((P.x + Math.cos(P.ang) * 60) / TS); ty = Math.floor((P.y + Math.sin(P.ang) * 60) / TS); }
+    let ok = null; for (let r = 0; r < 3 && !ok; r++) for (let dy = -r; dy <= r && !ok; dy++) for (let dx = -r; dx <= r && !ok; dx++) { const x = tx + dx, y = ty + dy; if (freeTile(x, y) && G.tiles[IDX(x, y)] !== T.WATER && dist(P.x, P.y, x * TS + 16, y * TS + 16) > 30) ok = [x, y]; }
+    if (!ok) { msg('Pas la place pour la tourelle ici.', '#ff9a8a'); return; }
+    invTake(id, 1); const st = placeStruct('turret', ok[0], ok[1], true); st.ammo = 70; st.temp = 80; st.free = true; msg('Tourelle portable déployée (80 s).', '#9fe8ff'); fxRing(st.x, st.y, 36, '150,230,255', .5); return;
+  }
+  if (kind === 'drone') { invTake(id, 1); revealAround(Math.floor(P.x / TS), Math.floor(P.y / TS), 46); for (const p of G.pois) if (dist(p.cx, p.cy, P.x, P.y) < 46 * TS && !p.hidden) p.discovered = true; G.droneT = 25; msg('🛸 Drone lancé : la zone est cartographiée (ennemis repérés sur la mini-carte).', '#9fe8ff'); SFX.play('levelup', .5); return; }
+  if (kind === 'repairkit') { const v = nearestVehicle(P.x, P.y, 110); if (!v) { msg('Aucun véhicule à portée.', '#ff9a8a'); return; } invTake(id, 1); v.hp = Math.min(v.maxhp, v.hp + v.maxhp * .6); v.fuel = Math.min(v.maxfuel, v.fuel + 4); msg('🧰 Véhicule réparé (+60 % de coque).', '#8affb0'); SFX.play('build'); return; }
+  if (kind === 'wkit') { const w = curWeapon(); if (!w || durOf(w) > 96) { msg('Arme en bon état : rien à entretenir.', '#cfd8e8'); return; } invTake(id, 1); w.dur = Math.min(100, durOf(w) + 45); msg('🔧 ' + gearName(w) + ' entretenu (' + Math.round(w.dur) + '%).', '#8affb0'); SFX.play('build'); return; }
   invTake(id, 1);
   let tx = G.mouse.x, ty = G.mouse.y; const d = dist(P.x, P.y, tx, ty), maxd = 380;
   if (d > maxd) { tx = P.x + (tx - P.x) / d * maxd; ty = P.y + (ty - P.y) / d * maxd; }
@@ -276,6 +293,13 @@ function updateThrown(dt) {
       if (u >= 1) {
         g.z = 0;
         if (g.k === 'molotov') { SFX.play('explode', .3); addFire(g.x, g.y, 62, 7); for (let k = 0; k < 10; k++) addPart(g.x, g.y, rnd(-80, 80), rnd(-80, 80), .5, 3, '#ffb02a', 'fire'); makeNoise(g.x, g.y, 300); G.thrown.splice(i, 1); }
+        else if (g.k === 'smoke') { addCloud(g.x, g.y, 110, 15, 'smoke'); SFX.play('whoosh', .8); for (let k = 0; k < 14; k++) addPart(g.x, g.y, rnd(-70, 70), rnd(-70, 70), .8, rnd(4, 8), 'rgba(210,210,215,.6)', 'dot'); G.thrown.splice(i, 1); continue; }
+        else if (g.k === 'flash') { SFX.play('explode', .5); G.blasts.push({ x: g.x, y: g.y, r: 200, life: .3, max: .3, slam: true }); for (const m of G.mobs) if (!m.dead && !m.def.boss && dist(m.x, m.y, g.x, g.y) < 250) { m.stun = 3.6; addText(m.x, m.y - 18, '✨', '#fff'); } if (dist(P.x, P.y, g.x, g.y) < 230) G.flash = Math.max(G.flash || 0, .9); makeNoise(g.x, g.y, 800); G.thrown.splice(i, 1); continue; }
+        else if (g.k === 'gas') { addCloud(g.x, g.y, 105, 12, 'gas'); SFX.play('hit', .8); for (let k = 0; k < 14; k++) addPart(g.x, g.y, rnd(-60, 60), rnd(-60, 60), .8, rnd(3, 6), '#9acd32', 'dot'); G.thrown.splice(i, 1); continue; }
+        else if (g.k === 'incend') { SFX.play('explode', .5); addFire(g.x, g.y, 98, 9); for (const m of G.mobs) if (!m.dead && !m.def.fireproof && dist(m.x, m.y, g.x, g.y) < 110) m.burn = Math.max(m.burn || 0, 4); for (let k = 0; k < 16; k++) addPart(g.x, g.y, rnd(-100, 100), rnd(-100, 100), .5, 3, '#ffb02a', 'fire'); makeNoise(g.x, g.y, 350); G.thrown.splice(i, 1); continue; }
+        else if (g.k === 'cluster') { g.state = 'cluster'; g.life = 1.3; g.tick = 0; g.n = 0; explode(g.x, g.y, 70, 90, { team: 'f', cause: 'votre grenade' }); }
+        else if (g.k === 'decoy') { g.state = 'decoy'; g.life = 22; g.tick = 0; }
+        else if (g.k === 'beacon') { g.state = 'beacon'; g.life = 18; }
         else if (g.k === 'flare') { g.state = 'flare'; g.life = 75; }
         else if (g.k === 'cracker') { g.state = 'cracker'; g.life = 9; g.tick = 0; }
         else g.state = 'fuse';
@@ -283,6 +307,15 @@ function updateThrown(dt) {
     } else if (g.state === 'fuse') {
       g.fuse -= dt; if (Math.random() < dt * 20) addPart(g.x, g.y - 4, rnd(-20, 20), rnd(-40, -10), .3, 1.5, '#ffd070');
       if (g.fuse <= 0) { explode(g.x, g.y, 125, 170, { team: 'f', cause: 'votre grenade' }); makeNoise(g.x, g.y, 900); G.thrown.splice(i, 1); }
+    } else if (g.state === 'cluster') {
+      g.life -= dt; g.tick -= dt; if (g.tick <= 0 && g.n < 5) { g.tick = .24; g.n++; const a = rnd(0, TAU), r = rnd(40, 100); explode(g.x + Math.cos(a) * r, g.y + Math.sin(a) * r, 58, 80, { team: 'f', cause: 'votre grenade' }); }
+      if (g.life <= 0 || g.n >= 5) G.thrown.splice(i, 1);
+    } else if (g.state === 'decoy') {
+      g.life -= dt; g.tick -= dt; if (g.tick <= 0) { g.tick = .6; SFX.play('click', .9); for (let k = 0; k < 4; k++) addPart(g.x, g.y, rnd(-50, 50), rnd(-50, 50), .3, 2, '#9fe8ff'); makeNoise(g.x, g.y, 1150); }
+      if (g.life <= 0) G.thrown.splice(i, 1);
+    } else if (g.state === 'beacon') {
+      g.life -= dt; if (Math.random() < dt * 25) addPart(g.x, g.y, rnd(-10, 10), rnd(-120, -60), 1, rnd(3, 5), 'rgba(255,90,60,.7)', 'dot');
+      if (g.life <= 0) { spawnAirdrop(g.x, g.y); msg('🛰️ Largage en approche : cherchez la caisse près de la balise !', '#ffe070'); G.thrown.splice(i, 1); }
     } else if (g.state === 'flare') {
       g.life -= dt; if (Math.random() < dt * 12) addPart(g.x, g.y, rnd(-15, 15), rnd(-70, -30), .5, 1.5, '#ff6a6a', 'fire');
       if (g.life <= 0) G.thrown.splice(i, 1);
@@ -296,6 +329,7 @@ function updateThrown(dt) {
     const m = G.mines[i]; m.arm -= dt; if (m.arm > 0) continue;
     for (const e of G.mobs) {
       if (e.dead || e.def.fac === 'wild' && !e.aggro || e.def.ai === 'prey') continue;
+      if (m.trap) { if (dist(m.x, m.y, e.x, e.y) < 16 + e.r * .6) { hurtMob(e, 45, { kind: 'melee', ang: 0 }); e.stun = 6; addText(e.x, e.y - 20, 'PIÈGE !', '#ffd070', true); SFX.play('thud', .9); makeNoise(m.x, m.y, 300); G.mines.splice(i, 1); break; } continue; }
       if (dist(m.x, m.y, e.x, e.y) < 26 + e.r) { explode(m.x, m.y, 115, 190, { team: 'f', cause: 'votre mine' }); makeNoise(m.x, m.y, 900); G.mines.splice(i, 1); break; }
     }
   }
@@ -388,6 +422,7 @@ function damageStruct(s, d) {
 function updateStructs(dt) {
   for (const s of G.structs.values()) {
     if (s.flash > 0) s.flash -= dt;
+    if (s.temp !== undefined) { s.temp -= dt; if (s.temp <= 0) { fxRing(s.x, s.y, 30, '210,190,160', .4); for (let q = 0; q < 8; q++) addPart(s.x, s.y, rnd(-80, 80), rnd(-80, 80), .5, 3, '#aab', 'dot'); removeStructRaw(s); continue; } }
     if (s.type === 'turret') updateTurret(s, dt);
     else if (s.type === 'barrel') { if (s.water < 6) s.water = Math.min(6, s.water + dt / 45 * (G.wType === 'rain' || G.wType === 'storm' ? 1 + 3 * G.wInt : 1)); }
     else if (s.type === 'plot' && s.plant === 1) { if (G.wType === 'rain' || G.wType === 'storm') s.t0 -= dt * .5 * G.wInt; if (G.clock - s.t0 > DAY_LEN * 1.2) s.plant = 2; }

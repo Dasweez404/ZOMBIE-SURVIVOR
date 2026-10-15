@@ -26,7 +26,7 @@ function updatePlayer(dt) {
   const coldM = P.temp < 30 ? .93 : 1;
   if (P.veh) { driveVehicle(dt); P.stam = Math.min(maxStam(), P.stam + 15 * dt); }
   else {
-    let sp = 138 * moveSpeedMul() * coldM * (P.sprint ? 1.6 : 1) * (aiming ? .82 : 1);
+    let sp = 138 * moveSpeedMul() * coldM * (P.sprint ? 1.6 : 1) * (aiming ? .82 : 1); { const hw = curWeapon(); if (hw && hw.id && WEAPONS[hw.id].heavy && G.lmb && !G.buildMode) sp *= WEAPONS[hw.id].heavy; }
     if (G.tiles[IDX(Math.floor(P.x / TS), Math.floor(P.y / TS))] === T.ROAD) sp *= 1.06;
     if (P.infect) sp *= .92;
     if (P.slowT > 0) { P.slowT -= dt; sp *= .55; }
@@ -42,10 +42,12 @@ function updatePlayer(dt) {
 
   // bruit des pas
   P.noiseT -= dt;
-  if (P.noiseT <= 0 && P.moving && !P.veh) { P.noiseT = .6; makeNoise(P.x, P.y, P.sprint ? 230 : 95, true); }
+  if (P.noiseT <= 0 && P.moving && !P.veh) { P.noiseT = .6; makeNoise(P.x, P.y, (P.sprint ? 230 : 95) * (1 - Math.min(.75, armorSum('stealth'))), true); }
 
   // timers
   if (P.perfectT > 0) P.perfectT -= dt;
+  if (P.buff) { P.buff.t -= dt; if (P.buff.t <= 0) { msg('Effet terminé : ' + P.buff.n, '#cfd8e8'); P.buff = null; } }
+  if (P.burstLeft > 0) { P.burstT -= dt; if (P.burstT <= 0) { const bw = curWeapon(); if (bw && !WEAPONS[bw.id].melee && bw.mag > 0 && !P.reloading && !P.dead) { P.inBurst = true; fireGun(bw, wstat(bw)); P.inBurst = false; P.burstT = .07; P.burstLeft--; } else P.burstLeft = 0; } }
   P.cd -= dt; P.gadCd -= dt; P.useCd -= dt; P.healCd -= dt;
   if (P.swing > 0) P.swing -= dt; if (P.hurtT > 0) P.hurtT -= dt; if (P.flashT > 0) P.flashT -= dt; if (P.painT > 0) P.painT -= dt;
   P.bloom = Math.max(0, P.bloom - dt * .4);
@@ -81,14 +83,16 @@ function fireGun(w, s) {
     spawnBullet({
       x: P.x + Math.cos(P.ang) * 18, y: P.y + Math.sin(P.ang) * 18, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: s.dmg,
       left: s.range * (s.flame ? rnd(.6, 1) : 1), team: 'f', pierce: s.pierce || 0, hit: (s.pierce || s.flame) ? new Set() : null, crit: Math.random() < .05 + .02 * P.skills.aim,
-      flame: !!s.flame, r: s.flame ? 9 : 3, src: 'p', col: s.ammo === 'bolt' ? '#d8c8a0' : '#ffe9a0', kind: s.ammo === 'bolt' ? 'bolt' : 'b',
+      flame: !!s.flame, r: s.flame ? 9 : 3, src: 'p', col: s.energy ? '#7ad8ff' : s.acid ? '#9ae83a' : (s.ammo === 'bolt' || s.ammo === 'arrow') ? '#d8c8a0' : s.expl ? '#ffb060' : '#ffe9a0', kind: (s.ammo === 'bolt' || s.ammo === 'arrow') ? 'bolt' : 'b',
+      expl: s.expl || 0, stun: s.stun || 0, ignite: !!s.ignite, acid: !!s.acid, energy: !!s.energy,
     });
   }
+  if (s.burst && !P.inBurst) { P.burstLeft = s.burst - 1; P.burstT = .07; }
   P.bloom = Math.min(.25, P.bloom + s.spr * .25 + .004);
   { const kk = Math.min(9, 1.5 + s.dmg / 14) * (s.flame ? .2 : 1); G.kick.x -= Math.cos(P.ang) * kk; G.kick.y -= Math.sin(P.ang) * kk; }
   tutEvent('shots');
   P.flashT = .06; shake(s.flame ? .5 : Math.min(4, s.dmg / 18));
-  const snd = s.silenced ? 'silenced' : s.flame ? 'flame' : s.ammo === 'bolt' ? 'bow' : s.pellets ? 'shotgun' : (s.ammo === 'a762' || s.ammo === 'a556') ? 'rifle' : s.auto ? 'smg' : 'pistol';
+  const snd = s.silenced ? 'silenced' : s.flame ? 'flame' : s.energy ? 'zap' : s.acid ? 'flame' : s.expl ? 'rocket' : (s.ammo === 'bolt' || s.ammo === 'arrow') ? 'bow' : s.ammo === 'a50' ? 'rifle' : s.pellets ? 'shotgun' : (s.ammo === 'a762' || s.ammo === 'a556') ? 'rifle' : s.auto ? 'smg' : 'pistol';
   SFX.play(snd);
   if (!s.flame && snd !== 'silenced') for (let i = 0; i < 2; i++) addPart(P.x, P.y, Math.cos(P.ang + 1.6) * rnd(60, 130) + rnd(-20, 20), Math.sin(P.ang + 1.6) * rnd(60, 130), .55, 3, '#d8b24a', 'shell');
   if (s.noiseR) makeNoise(P.x, P.y, s.noiseR, true);
@@ -115,6 +119,7 @@ function toolPower(kind) {
   return best;
 }
 function meleeSwing(w, s) {
+  if (s.fuelUse) { w.fuelCt = (w.fuelCt || 0) + 1; if (w.fuelCt >= 25) { w.fuelCt = 0; if (invCount('fuel') > 0) invTake('fuel', 1); else w.dry = true; } if (w.dry && invCount('fuel') > 0) w.dry = false; if (w.dry) { P.cd = .5; if (G.clock - (G.noFuelMsg || 0) > 2) { msg('Tronçonneuse : plus de carburant !', '#e0a050'); G.noFuelMsg = G.clock; } return; } }
   P.mStep = (G.clock - (P.mLast || -9) < .75) ? ((P.mStep || 0) + 1) % 3 : 0; P.mLast = G.clock; const fin = P.mStep === 2; P.swingDir = P.mStep % 2 ? -1 : 1;
   P.cd = s.rate * (fin ? 1.25 : 1); P.swing = fin ? .26 : .2; P.swingA = P.ang; SFX.play('swing', fin ? 1 : .7);
   { const lu = fin ? 20 : 11; moveEnt(P, Math.cos(P.ang) * lu, Math.sin(P.ang) * lu, true); G.kick.x += Math.cos(P.ang) * 2; G.kick.y += Math.sin(P.ang) * 2; } // fente
@@ -123,7 +128,7 @@ function meleeSwing(w, s) {
     if (m.dead) continue; const d = dist(P.x, P.y, m.x, m.y);
     if (d > s.range + m.r) continue;
     const a = ang(P.x, P.y, m.x, m.y);
-    if (Math.abs(angDiff(P.ang, a)) < s.arc / 2 + m.r / Math.max(d, 1)) { hurtMob(m, s.dmg * (fin ? 1.7 : 1) * (P.perfectT > 0 ? 1.3 : 1), { kind: 'melee', ang: a, kb: s.kb * (fin ? 2.2 : 1), crit: fin || Math.random() < .08 + .02 * P.skills.aim, src: 'p' }); hitAny = true; if (fin) { hitstop(.06); addPart(m.x, m.y, 0, 0, .25, 9, '#fff', 'dot'); } }
+    if (Math.abs(angDiff(P.ang, a)) < s.arc / 2 + m.r / Math.max(d, 1)) { hurtMob(m, s.dmg * (fin ? 1.7 : 1) * (P.perfectT > 0 ? 1.3 : 1), { kind: 'melee', ang: a, kb: s.kb * (fin ? 2.2 : 1), crit: fin || Math.random() < .08 + .02 * P.skills.aim, src: 'p' }); hitAny = true; if (s.stun) m.stun = Math.max(m.stun || 0, s.stun); if (s.ignite && !m.def.fireproof) m.burn = Math.max(m.burn || 0, 3); if (s.bleed) m.bleedT = Math.max(m.bleedT || 0, 4); if (fin) { hitstop(.06); addPart(m.x, m.y, 0, 0, .25, 9, '#fff', 'dot'); } }
   }
   if (!hitAny) { // récolte
     const o = nearestHarvestable(P.x + Math.cos(P.ang) * 26, P.y + Math.sin(P.ang) * 26, s.range + 16, true);
@@ -147,7 +152,7 @@ function harvestHit(o, wdef) {
   const h = HARV[o.k]; let power;
   if (h.tool) { const mult = wdef ? (wdef[h.tool] || .3) : .5; power = Math.max(5, mult * 12) * (1 + .12 * P.skills.str); if (!wdef) power = 6 * (1 + .12 * P.skills.str); }
   else power = 99;
-  o.hp -= power; o.shakeT = .15;
+  power *= 1 + armorSum('harvest'); o.hp -= power; o.shakeT = .15;
   for (let i = 0; i < 3; i++) addPart(o.x, o.y, rnd(-70, 70), rnd(-70, 70), .35, 2, o.k === 'rock' || o.k === 'wreck' ? '#aaa' : o.k === 'tree' ? '#5a8a3a' : '#7ab04a');
   SFX.play(o.k === 'rock' || o.k === 'wreck' ? 'thud' : 'hit', .6);
   makeNoise(o.x, o.y, o.k === 'rock' || o.k === 'wreck' ? 160 : 130, true);
@@ -185,7 +190,7 @@ function survivalTick(dt) {
   // température
   const target = 50 + ambientTemp() + armorWarmth();
   const rainy = (G.wType === 'rain' || G.wType === 'storm') && G.wInt > .3 && !G.inside && !(P.veh && P.veh.def.closed);
-  if (rainy) P.wet = Math.min(1, P.wet + dt * .045 * G.wInt); else P.wet = Math.max(0, P.wet - dt * (P.nearFire ? .12 : .025));
+  if (rainy) P.wet = Math.min(1, P.wet + dt * .045 * G.wInt * (1 - Math.min(.9, armorSum('wet')))); else P.wet = Math.max(0, P.wet - dt * (P.nearFire ? .12 : .025));
   if (P.wet > .6 && !P.wetWarn) { msg('💧 Vous êtes trempé : abritez-vous ou séchez-vous près d\'un feu.', '#8ac8ff'); P.wetWarn = true; } if (P.wet < .2) P.wetWarn = false;
   P.temp = clamp(P.temp + (target - P.temp) * Math.min(1, .035 * dt), 0, 100);
   if (P.temp < 15 || P.temp > 93) { P.tempT = (P.tempT || 0) - dt; if (P.tempT <= 0) { P.tempT = 1; hurtPlayer(1.3, { pure: true, cause: P.temp < 15 ? 'le froid' : 'la chaleur' }); } }
@@ -203,7 +208,7 @@ function survivalTick(dt) {
   // régénération
   let reg = 0;
   if (P.hun > 55 && P.thi > 55 && !P.bleed && !P.infect && P.temp > 20 && P.temp < 88 && G.clock - P.lastHurt > 4) reg = .35;
-  const b = baseAt(P.x, P.y); if (b && !starving) reg += BASE_LEVELS[b.lvl].regen;
+  const b = baseAt(P.x, P.y); if (b && !starving) reg += BASE_LEVELS[b.lvl].regen; if (P.hun > 10 && P.thi > 10) reg += armorSum('regen');
   if (reg > 0 && P.hp < maxHP()) P.hp = Math.min(maxHP(), P.hp + reg * dt);
   if (P.hp > maxHP()) P.hp = maxHP();
   if (P.hun < 20 && !P.hunWarn) { msg('Vous avez faim.', '#e0a050'); P.hunWarn = true; } if (P.hun > 30) P.hunWarn = false;
@@ -237,14 +242,15 @@ function useConsumable(id) {
   const it = ITEMS[id]; if (!it || invCount(id) < 1) return false;
   const u = it.use; if (!u) return false;
   if (it.t === 'med' && P.healCd > 0) return false;
-  if (u.hp && P.hp >= maxHP() && !u.cure) { msg('Vous êtes en pleine forme.', '#aaa'); return false; }
-  if (it.t === 'med' && !(u.rad && P.rad > 0) && !(u.hp && P.hp < maxHP()) && !(u.cure && u.cure.some(c => P[c === 'bleed' ? 'bleed' : c === 'infect' ? 'infect' : 'sick']))) { msg('Aucun effet nécessaire.', '#aaa'); return false; }
+  if (u.hp && P.hp >= maxHP() && !u.cure && !u.buff) { msg('Vous êtes en pleine forme.', '#aaa'); return false; }
+  if (it.t === 'med' && !u.buff && !(u.rad && P.rad > 0) && !(u.hp && P.hp < maxHP()) && !(u.cure && u.cure.some(c => P[c === 'bleed' ? 'bleed' : c === 'infect' ? 'infect' : 'sick']))) { msg('Aucun effet nécessaire.', '#aaa'); return false; }
   invTake(id, 1);
   if (u.hun) P.hun = Math.min(100, P.hun + u.hun);
   if (u.thi) P.thi = Math.min(100, P.thi + u.thi);
   if (u.rad) { P.rad = Math.max(0, P.rad + u.rad); addText(P.x, P.y - 24, '☢ ' + u.rad, '#9aff4a'); }
   if (u.temp) P.temp = Math.min(100, P.temp + u.temp);
   if (u.stam) P.stam = Math.min(maxStam(), P.stam + u.stam);
+  if (u.buff) { P.buff = Object.assign({}, u.buff); addText(P.x, P.y - 40, u.buff.n + ' !', '#ffe070', true); }
   if (u.hp) { P.hp = Math.min(maxHP(), P.hp + u.hp); addText(P.x, P.y - 24, '+' + u.hp, '#7cff7c'); }
   if (u.cure) for (const c of u.cure) { if (c === 'bleed') P.bleed = 0; if (c === 'infect') P.infect = 0; if (c === 'sick') P.sick = 0; }
   if (u.sick && Math.random() < u.sick) { P.sick = 40; msg('Vous ne vous sentez pas bien... (intoxication)', '#9acd32'); }

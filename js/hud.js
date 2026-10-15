@@ -28,6 +28,7 @@ function drawHUD(c, time) {
   drawCompass(c, W, H, time);
   drawTopBars(c, W, H);
   drawMinimap(c, W, H, time);
+  if (P.buff && P.buff.t > 0) { c.font = 'bold 12px sans-serif'; const t = '⚡ ' + P.buff.n + ' ' + Math.ceil(P.buff.t) + 's'; const w = c.measureText(t).width + 18; glass(c, W / 2 - w / 2, H - 104, w, 22, 8, .7); c.fillStyle = '#ffe070'; c.textAlign = 'center'; c.fillText(t, W / 2, H - 88); }
   drawQuestTracker(c, W, H);
   drawPrompt(c, W, H, time);
   if (P.veh) drawVehGauge(c, W, H);
@@ -270,7 +271,7 @@ function drawMinimap(c, W, H, time) {
   for (const p of G.pois) { if (!p.discovered || p.hidden) continue; const px = x0 + (p.cx / TS - sx) * k, py = y0 + (p.cy / TS - sy) * k; if (px < x0 - 8 || px > x0 + S + 8 || py < y0 - 8 || py > y0 + S + 8) continue; mapPoiIcon(c, p, px, py); }
   if (G.airdrop && G.airdrop.o && !G.airdrop.o.opened) { const px = x0 + (G.airdrop.x / TS - sx) * k, py = y0 + (G.airdrop.y / TS - sy) * k; c.font = '14px sans-serif'; c.textAlign = 'center'; c.fillText('📦', px, py + 4); }
   for (const f of G.friends) if (!f.dead && f.kind !== 'guard') { c.fillStyle = '#6cf'; c.fillRect(x0 + (f.x / TS - sx) * k - 1.5, y0 + (f.y / TS - sy) * k - 1.5, 3, 3); }
-  for (const m of G.mobs) if (!m.dead && m.def.fac !== 'wild' && dist(m.x, m.y, P.x, P.y) < 420 && (m.state === 'chase' || m.state === 'combat')) { c.fillStyle = '#f44'; c.fillRect(x0 + (m.x / TS - sx) * k - 1.5, y0 + (m.y / TS - sy) * k - 1.5, 3, 3); }
+  for (const m of G.mobs) if (!m.dead && m.def.fac !== 'wild' && dist(m.x, m.y, P.x, P.y) < (G.droneT > 0 ? 1500 : 420) && (G.droneT > 0 || m.state === 'chase' || m.state === 'combat')) { c.fillStyle = '#f44'; c.fillRect(x0 + (m.x / TS - sx) * k - 1.5, y0 + (m.y / TS - sy) * k - 1.5, 3, 3); }
   const ppx = x0 + (tx - sx) * k, ppy = y0 + (ty - sy) * k;
   // cône de vision / direction
   c.fillStyle = 'rgba(255,255,100,.22)'; c.beginPath(); c.moveTo(ppx, ppy); c.arc(ppx, ppy, 26, P.ang - .5, P.ang + .5); c.closePath(); c.fill();

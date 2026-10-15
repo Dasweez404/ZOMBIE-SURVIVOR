@@ -241,6 +241,7 @@ function r3entities(vr, time, dt, fr, hidden) {
     const v = P.veh, gy = r3ground(P.x, P.y); pg.position.set(P.x / TS, gy + (v ? .45 : 0), P.y / TS); pg.rotation.y = -(v ? v.ang : P.ang);
     const w = curWeapon(), melee = w && WEAPONS[w.id].melee; pu.melee.visible = !!(w && melee); pu.rgun.visible = !!(w && !melee);
     if (w && !melee) pu.rgun.scale.x = clamp(WEAPONS[w.id].range / 400, .7, 1.5);
+    r3playerGear(pg);
     const run = P.moving ? 1 : .08; r3humanAnim(pu, (P.walk || 0), run, !w || melee, false);
     if (w && !melee) { pu.armR.rotation.z = 1.45; pu.armL.rotation.z = 1.2; } else if (P.swing > 0) pu.armR.rotation.z = 1.2;
     if (melee) { const sw = P.swing > 0 ? (-.9 + (1 - P.swing / .2) * 1.8) * (P.swingDir || 1) : .3; pu.melee.rotation.y = -sw; pu.melee.position.set(.3, .62, .26); }
@@ -289,7 +290,7 @@ function r3effects(vr, time, dt, fr, hidden) {
   }
   F.bul.count = nb; F.bul.instanceMatrix.needsUpdate = true; if (F.bul.instanceColor) F.bul.instanceColor.needsUpdate = true;
   for (const f of G.fires) { if (!inR(f.x, f.y, 4)) continue; const gy = r3ground(f.x, f.y), n = Math.ceil(f.r / 12); for (let q = 0; q < n; q++) { const a = Math.random() * TAU, rr = Math.random() * f.r / TS; r3part(f.x / TS + Math.cos(a) * rr, gy + .2 + Math.random() * .7, f.y / TS + Math.sin(a) * rr, .5, RGB_.fire, .5 * clamp(f.life / 1.5, 0, 1), true); } R3.lightSrc.push({ x: f.x / TS, y: gy + .8, z: f.y / TS, c: '#ff9a40', k: 1.1, r: 11, d: (f.x / TS - R3.tx) ** 2 + (f.y / TS - R3.tz) ** 2 }); }
-  for (const k of G.clouds) { if (!inR(k.x, k.y, 5)) continue; const gy = r3ground(k.x, k.y), col = k.kind === 'rad' ? RGB_.rad : RGB_.toxic, a = clamp(k.life / k.max * 1.6, 0, 1) * .16; for (let q = 0; q < 7; q++) { const ang = q * .9 + time * .15, rr = k.r / TS * (.2 + (q % 4) * .22); r3part(k.x / TS + Math.cos(ang) * rr, gy + .5 + Math.sin(time + q) * .15, k.y / TS + Math.sin(ang) * rr, k.r / TS * 1.5, col, a, false); } }
+  for (const k of G.clouds) { if (!inR(k.x, k.y, 5)) continue; const gy = r3ground(k.x, k.y), col = k.kind === 'rad' ? RGB_.rad : k.kind === 'smoke' ? [.82, .84, .88] : RGB_.toxic, a = clamp(k.life / k.max * 1.6, 0, 1) * (k.kind === 'smoke' ? .34 : .16); for (let q = 0; q < 7; q++) { const ang = q * .9 + time * .15, rr = k.r / TS * (.2 + (q % 4) * .22); r3part(k.x / TS + Math.cos(ang) * rr, gy + .5 + Math.sin(time + q) * .15, k.y / TS + Math.sin(ang) * rr, k.r / TS * 1.5, col, a, false); } }
   let di = 0; for (const z of G.radZones) { if (di >= 24 || !inR(z.x, z.y, z.r / TS + 3)) continue; const d = F.disc[di++]; d.visible = true; d.position.set(z.x / TS, r3ground(z.x, z.y) + .25, z.y / TS); d.scale.setScalar(z.r / TS * .96); d.material.opacity = .15 + (.5 + Math.sin(time * 1.6) * .5) * .08; }
   for (; di < 24; di++) F.disc[di].visible = false;
   let bi = 0; for (const b of G.blasts) { if (bi >= 8 || !inR(b.x, b.y, 6)) continue; const m = F.blast[bi++], u = 1 - b.life / b.max; m.visible = true; m.position.set(b.x / TS, r3ground(b.x, b.y) + .4, b.y / TS); m.scale.setScalar(Math.max(.1, b.r / TS * (.35 + u * .65))); m.material.opacity = (1 - u) * .55; m.material.color.set(b.toxic ? '#80e040' : b.slam ? '#c8b890' : '#ff9a40'); R3.lightSrc.push({ x: b.x / TS, y: r3ground(b.x, b.y) + 1, z: b.y / TS, c: b.toxic ? '#80ff40' : '#ffa040', k: 2.2 * (1 - u), r: 16, d: 0 }); }
@@ -405,4 +406,14 @@ function r3adapt(time, fr) {
     R3.calm += 30; const lim = now < R3.capUntil ? Math.min(max, R3.capUp * .98) : max;
     if (R3.calm >= 240 && since > 6000 && R3.res < lim - .01) { r3setRes(Math.min(lim, R3.res + .1)); R3.lastChange = now; R3.hist.length = 0; R3.calm = 0; }
   } else R3.calm = 0;
+}
+
+// tenue du joueur en 3D : couleur du torse, casque, sac, visière de vision nocturne
+function r3playerGear(pg) {
+  const u = pg.userData, a = P.armor, key = ['head', 'body', 'hands', 'back'].map(s => a[s] ? a[s].id : '').join('|');
+  if (u.gk === key) return; u.gk = key; for (const m of u.gearMeshes || []) u.inner.remove(m); u.gearMeshes = []; const g = GEO(), add = m => { u.inner.add(m); u.gearMeshes.push(m); };
+  u.bodyMat.color.set(a.body && ARMOR[a.body.id].col ? ARMOR[a.body.id].col : '#3a6ab0');
+  if (a.head) { const A_ = ARMOR[a.head.id], c = A_.col || '#666'; add(bmesh(g.sph, lam(c), 0, 1.04, 0, .42, .32, .42)); if (A_.nvg) add(bmesh(g.box, lam('#6aff8a', { emissive: '#2aa84a' }), .17, 1.0, 0, .1, .1, .36)); }
+  if (a.back) { const c = ARMOR[a.back.id].col || '#6a5a3a'; add(bmesh(g.box, lam(c), -.27, .64, 0, .2, .42, .36)); add(bmesh(g.box, lam(m3Hex(c, '#000000', .3)), -.27, .86, 0, .22, .06, .38)); }
+  if (a.hands) { const c = ARMOR[a.hands.id].col || '#444'; for (const s of [-1, 1]) add(bmesh(g.box, lam(c), .02, .78 - .46, s * .3, .15, .13, .15)); }
 }

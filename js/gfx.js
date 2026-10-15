@@ -399,7 +399,7 @@ function drawRings(c) {
 function drawClouds(c, time) {
   for (const k of G.clouds) {
     if (k.x < G.camX - 120 || k.x > G.camX + VW + 120 || k.y < G.camY - 120 || k.y > G.camY + VH + 120) continue;
-    const a = clamp(k.life / 1.5, 0, 1) * (k.kind === 'rad' ? .5 : .42), rgb = k.kind === 'rad' ? '150,255,70' : '120,200,40';
+    const a = clamp(k.life / 1.5, 0, 1) * (k.kind === 'rad' ? .5 : k.kind === 'smoke' ? .6 : .42), rgb = k.kind === 'rad' ? '150,255,70' : k.kind === 'smoke' ? '200,205,215' : k.kind === 'gas' ? '170,230,60' : '120,200,40';
     c.save(); if (k.kind === 'rad') c.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 6; i++) { const an = i / 6 * TAU + time * .35 + k.x, d = k.r * .45 * (.6 + Math.sin(time * .9 + i) * .4); c.globalAlpha = a; blit(c, glowSprite(rgb), k.x + Math.cos(an) * d, k.y + Math.sin(an) * d, 0, k.r / 22); }
     c.restore();

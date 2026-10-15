@@ -7,27 +7,30 @@ function capsule(c, x1, y1, x2, y2, w, c1, c2) {
 const SKIN = ['#e0b896', '#d8a880', '#c89068', '#a87050'];
 function torso(c, rx, ry, c1, c2) { const g = c.createLinearGradient(0, -ry, 0, ry); g.addColorStop(0, c1); g.addColorStop(1, c2); c.fillStyle = g; c.beginPath(); c.ellipse(0, 0, rx, ry, 0, 0, TAU); c.fill(); c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1.1; c.stroke(); c.strokeStyle = 'rgba(255,255,255,.14)'; c.lineWidth = 1; c.beginPath(); c.ellipse(-.5, -1, rx - 1.6, ry - 2, 0, Math.PI * 1.05, Math.PI * 1.8); c.stroke(); }
 function head(c, x, y, r, skin) { const g = c.createRadialGradient(x - r * .3, y - r * .4, r * .1, x, y, r); g.addColorStop(0, skin[0]); g.addColorStop(1, skin[1]); c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 1; c.stroke(); }
+function m3(h) { const n = parseInt(h.slice(1), 16); return 'rgb(' + Math.round((n >> 16 & 255) * .55) + ',' + Math.round((n >> 8 & 255) * .55) + ',' + Math.round((n & 255) * .55) + ')'; }
 function skinPair(i) { const s = SKIN[i % 4], d = ['#a07858', '#8e6446', '#7a5236', '#5e3c24'][i % 4]; return [s, d]; }
 
 // ---------- joueur ----------
 const BODYCOL = { none: ['#5a86c0', '#2e4a78'], jacket: ['#7a8e66', '#46563a'], leather: ['#8a6038', '#4a2e18'], kevlar: ['#3e5062', '#1e2a36'], plate: ['#4e5644', '#262c20'], hazmat: ['#e8d838', '#9a8a14'] };
 function playerSprite() {
-  const body = P.armor.body ? P.armor.body.id : 'none', hd = P.armor.head ? P.armor.head.id : '-', pk = P.pack, key = 'pl:' + body + ':' + hd + ':' + pk;
+  const body = P.armor.body ? P.armor.body.id : 'none', hd = P.armor.head ? P.armor.head.id : '-', pk = P.pack, bk = P.armor.back ? P.armor.back.id : '', gl = P.armor.hands ? P.armor.hands.id : '', key = 'pl:' + body + ':' + hd + ':' + pk + ':' + bk + ':' + gl;
   return sprite(key, 56, 56, c => {
-    const col = BODYCOL[body] || BODYCOL.none;
+    const col = BODYCOL[body] || (ARMOR[body] && ARMOR[body].col ? [ARMOR[body].col, m3(ARMOR[body].col)] : BODYCOL.none);
+    if (bk && ARMOR[bk]) { const bc = ARMOR[bk].col || '#6a5a3a'; const g = c.createLinearGradient(-16, 0, -4, 0); g.addColorStop(0, bc); g.addColorStop(1, m3(bc)); c.fillStyle = g; rrect(c, -17, -9, 12, 18, 3); c.fill(); c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1; c.stroke(); }
     if (pk > 0) { const g = c.createLinearGradient(-14, 0, -4, 0); g.addColorStop(0, ['#6a5a3a', '#4a5a3a', '#3a4a5a'][Math.min(2, pk - 1)]); g.addColorStop(1, '#2a2a22'); c.fillStyle = g; rrect(c, -15 - pk, -8 - pk * .5, 11 + pk, 16 + pk, 3); c.fill(); c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1; c.stroke(); c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(-12, -2, 6, 1.5); }
     capsule(c, 1, 9.5, 12, 6.6, 5.2, col[0], col[1]); capsule(c, 1, -9.5, 12, -6.6, 5.2, col[0], col[1]);
     torso(c, 8, 12.5, col[0], col[1]);
     if (body === 'kevlar' || body === 'plate') { c.fillStyle = 'rgba(0,0,0,.28)'; rrect(c, -5, -9, 10, 18, 3); c.fill(); c.strokeStyle = 'rgba(255,255,255,.18)'; c.lineWidth = 1; c.strokeRect(-4.5, -8, 9, 16); c.fillStyle = body === 'plate' ? '#6a7260' : '#586878'; c.fillRect(-7, -11, 4, 6); c.fillRect(-7, 5, 4, 6); }
     if (body === 'leather') { c.strokeStyle = 'rgba(30,16,6,.6)'; c.lineWidth = 1; c.beginPath(); c.moveTo(2, -10); c.lineTo(2, 10); c.stroke(); }
     if (body === 'hazmat') { c.strokeStyle = '#2a2a2a'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(-6, -4); c.lineTo(6, -4); c.moveTo(-6, 4); c.lineTo(6, 4); c.stroke(); }
-    const sk = skinPair(1); for (const y of [7.2, -7.2]) { gradBall(c, 13.6, y * .93, 2.9, sk[0], sk[1]); }
+    const sk = skinPair(1), gc = gl && ARMOR[gl] ? ARMOR[gl].col : null; for (const y of [7.2, -7.2]) { gradBall(c, 13.6, y * .93, 2.9, gc || sk[0], gc ? m3(gc) : sk[1]); }
     head(c, 1.5, 0, 6.8, sk);
     // visage / coiffure / casque
     if (hd === '-') { c.fillStyle = '#3a2814'; c.beginPath(); c.arc(0, 0, 7, Math.PI * .5 + .3, Math.PI * 1.5 - .3); c.lineTo(2, 0); c.fill(); c.beginPath(); c.arc(-.5, 0, 6.9, Math.PI * .5, Math.PI * 1.5); c.fill(); c.fillStyle = 'rgba(255,255,255,.12)'; c.beginPath(); c.arc(-1, -2, 3.5, Math.PI, Math.PI * 1.8); c.fill(); }
     else if (hd === 'cap') { c.fillStyle = '#7a6a30'; c.beginPath(); c.arc(.5, 0, 7.2, 0, TAU); c.fill(); c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1; c.stroke(); c.fillStyle = '#4a3e18'; c.beginPath(); c.moveTo(6, -5); c.quadraticCurveTo(13, 0, 6, 5); c.closePath(); c.fill(); c.stroke(); c.fillStyle = 'rgba(255,255,255,.2)'; c.beginPath(); c.arc(-1, -2, 3.2, Math.PI, Math.PI * 1.8); c.fill(); }
     else if (hd === 'helmet_moto') { gradBall(c, .5, 0, 7.8, '#5a5a66', '#16161c'); c.fillStyle = 'rgba(120,200,240,.8)'; c.beginPath(); c.moveTo(3, -5.5); c.quadraticCurveTo(9.5, 0, 3, 5.5); c.closePath(); c.fill(); c.strokeStyle = 'rgba(0,0,0,.6)'; c.stroke(); c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.arc(-1.5, -3, 2.6, Math.PI, Math.PI * 1.8); c.fill(); }
     else if (hd === 'helmet_mil') { gradBall(c, .5, 0, 8, '#5e7048', '#26301c'); c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1; c.stroke(); c.strokeStyle = 'rgba(20,28,14,.6)'; c.beginPath(); c.arc(.5, 0, 5, -2, 2); c.stroke(); c.fillStyle = 'rgba(255,255,255,.2)'; c.beginPath(); c.arc(-1.5, -3, 2.8, Math.PI, Math.PI * 1.8); c.fill(); }
+    else if (hd !== '-' && ARMOR[hd] && !['cap', 'helmet_moto', 'helmet_mil', 'gasmask'].includes(hd)) { const hc = ARMOR[hd].col || '#666'; gradBall(c, .5, 0, 7.9, hc, m3(hc)); c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1; c.stroke(); if (ARMOR[hd].nvg) { c.fillStyle = '#6aff8a'; c.fillRect(5, -4.5, 2.6, 9); } else { c.fillStyle = 'rgba(255,255,255,.18)'; c.beginPath(); c.arc(-1, -2, 3, 0, TAU); c.fill(); } }
     else if (hd === 'gasmask') { gradBall(c, .5, 0, 7.6, '#4a4e44', '#1e2018'); c.fillStyle = '#16201a'; c.beginPath(); c.ellipse(5, -3, 2.6, 2.2, 0, 0, TAU); c.ellipse(5, 3, 2.6, 2.2, 0, 0, TAU); c.fill(); c.fillStyle = 'rgba(160,255,200,.5)'; c.beginPath(); c.arc(5.4, -3.3, 1, 0, TAU); c.arc(5.4, 2.7, 1, 0, TAU); c.fill(); gradBall(c, 9.5, 0, 3, '#6a6e60', '#2a2c24'); }
   });
 }
@@ -234,7 +237,7 @@ function drawPlayer(c, time) {
     const b = WEAPONS[w.id];
     if (b.melee) { reach = P.swing > 0 ? 16 : 6; c.save(); c.translate(12, 7); c.rotate(P.swing > 0 ? (-.9 + (1 - P.swing / .2) * 1.8) * (P.swingDir || 1) : .3); drawMeleeModel(c, w.id, b); c.restore(); }
     else {
-      const len = b.flame ? 26 : ({ pistol: 14, smg: 20, shotgun: 26, hunter: 32, ar: 28, crossbow: 22 }[w.id] || 18);
+      const len = b.flame ? 26 : ({ pistol: 14, smg: 20, shotgun: 26, hunter: 32, ar: 28, crossbow: 22 }[w.id] || b.len || 18);
       let g = c.createLinearGradient(0, -2.6, 0, 2.6); g.addColorStop(0, '#6a6e78'); g.addColorStop(1, '#1c1e24'); c.fillStyle = g; rrect(c, 7, -2.6, len, 5.2, 1.6); c.fill(); c.strokeStyle = 'rgba(0,0,0,.6)'; c.lineWidth = .8; c.stroke(); c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(8, -2, len - 2, 1);
       if (b.flame) { gradBall(c, 14, 4.5, 4.2, '#a82a1c', '#4a100a'); }
       if (w.att.sight) { c.fillStyle = '#16181e'; rrect(c, 13, -5.2, 9, 3, 1); c.fill(); if (w.att.sight === 'scope') { gradBall(c, 21, -3.7, 1.8, '#8ac0e0', '#1a3a50'); } }

@@ -247,8 +247,9 @@ function onNewDay() {
   if (G.day >= 4 && Math.random() < .5) G.ambushAt = G.clock + rnd(.15, .5) * DAY_LEN;
   saveGame(true);
 }
-function spawnAirdrop() {
-  const t = randomLandTile(G.rng, 14, 55); if (!t) return;
+function spawnAirdrop(ax, ay) {
+  let t = null; if (ax !== undefined) { const bx = Math.floor(ax / TS), by = Math.floor(ay / TS); for (let r = 1; r < 6 && !t; r++) for (let dy = -r; dy <= r && !t; dy++) for (let dx = -r; dx <= r && !t; dx++) if (freeTile(bx + dx, by + dy) && G.tiles[IDX(bx + dx, by + dy)] !== T.WATER) t = [bx + dx, by + dy]; }
+  if (!t) t = randomLandTile(G.rng, 14, 55); if (!t) return;
   const [tx, ty] = t, i = IDX(tx, ty);
   const o = addObj(tx, ty, 'crate', { solid: 1, loot: rollLoot(LOOT.airdrop, G.rng, 4), gear: [], opened: false, air: true, poi: -1, cid: G.nextCrate = (G.nextCrate || 0) + 1 });
   const rr = rollRare('airdrop', G.rng); if (rr) o.gear.push(rr);
@@ -354,7 +355,7 @@ function updateSpawning(dt) {
 // ---------- Mise à jour principale ----------
 function updateGame(dt) {
   G.clock += dt; G.dark = darkness(phaseOf(G.clock)); G.tick++;
-  G.playTime += dt; if (G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) G.combo = 0; } if (G.comboPop > 0) G.comboPop -= dt;
+  G.playTime += dt; if (G.droneT > 0) G.droneT -= dt; if (G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) G.combo = 0; } if (G.comboPop > 0) G.comboPop -= dt;
   if (!P.dead) updatePlayer(dt);
   // champs de flux
   G.flowT -= dt;
@@ -436,7 +437,7 @@ function saveGame(silent) {
       crates: [...G.objs.values()].filter(o => o.k === 'crate' && o.opened).map(o => o.cid),
       airdrops: [...G.objs.values()].filter(o => o.k === 'crate' && o.air && !o.opened).map(o => ({ tx: o.tx, ty: o.ty, loot: o.loot, gear: o.gear, cid: o.cid })),
       dep: G.depleted.map(o => [o.tx, o.ty, Math.round(o.regrowAt - G.clock)]),
-      quests: G.quests, mines: G.mines.map(m => ({ x: m.x, y: m.y })),
+      quests: G.quests, mines: G.mines.map(m => ({ x: m.x, y: m.y, trap: !!m.trap })),
       friends: G.friends.filter(f => !f.dead && (f.kind === 'pet' || (f.kind === 'recruit' && !f.temp))).map(f => ({ kind: f.kind, sp: f.sp, name: f.name, x: f.x, y: f.y, hp: f.hp, maxhp: f.maxhp, dmg: f.dmg, lvl: f.lvl, kills: f.kills, gun: f.gun, mode: f.mode, base: f.base })),
       vehicles: G.vehicles.map(v => ({ t: v.t, x: v.x, y: v.y, ang: v.ang, hp: v.hp, fuel: v.fuel, stash: v.stash, up: v.up })),
       zones: G.radZones.map(z => z.discovered), weather: { t: G.wType, left: G.wLeft, next: G.wNext },
@@ -463,7 +464,7 @@ function applySave(d) {
   const opened = new Set(d.crates); for (const o of G.objs.values()) if (o.k === 'crate' && opened.has(o.cid)) o.opened = true;
   for (const a of (d.airdrops || [])) { if (!G.objs.has(IDX(a.tx, a.ty))) addObj(a.tx, a.ty, 'crate', { solid: 1, loot: a.loot, gear: a.gear, opened: false, air: true, poi: -1, cid: a.cid }); }
   G.depleted = []; for (const [tx, ty, left] of d.dep) { const o = G.objs.get(IDX(tx, ty)); if (o) { o.dep = true; o.regrowAt = G.clock + left; const i = IDX(tx, ty); if (HARV[o.k] && HARV[o.k].solid && G.solid[i] === SO.OBJ) G.solid[i] = 0; G.depleted.push(o); } }
-  G.quests = d.quests; G.mines = d.mines.map(m => ({ x: m.x, y: m.y, arm: 0 }));
+  G.quests = d.quests; G.mines = d.mines.map(m => ({ x: m.x, y: m.y, arm: 0, trap: !!m.trap }));
   G.friends = G.friends.filter(f => f.kind === 'guard');
   for (const e of d.friends) {
     if (e.kind === 'pet') { const def = MOBS[e.sp]; const f = makePet({ t: e.sp, def, x: e.x, y: e.y }); Object.assign(f, { hp: e.hp, maxhp: e.maxhp, dmg: e.dmg, lvl: e.lvl, kills: e.kills, mode: e.mode || 'follow', name: e.name }); }
