@@ -143,6 +143,7 @@ function r3objSpec(o, tx, ty) { // géométrie statique d'un objet (null si rien
     case 'crate': return S(o.air ? 'crateAir' : o.opened ? 'crateOpen' : 'crate', 0);
     case 'mast': case 'radbarrel': case 'sandbag': case 'stall': case 'altar': case 'counter': case 'labtable': case 'tank': case 'tower': case 'rails': case 'pylon': case 'screen': return S(k, 0);
     case 'furn': return S('furn#' + (o.fv || 0), 0);
+    case 'stairs': return S(o.dir === 'up' ? 'stairsUp' : 'stairsDown', 0);
     case 'tent': return S('tent#' + Math.floor(o.v * 3), ry * .2);
     case 'pew': return S('pew#' + (o.fv || 0), 0);
     case 'desk': return S('desk#' + (o.fv || 0), 0);
@@ -199,7 +200,8 @@ function r3dynAnim(e, kind, time) {
 // ----- personnages et véhicules -----
 function r3entities(vr, time, dt, fr, hidden) {
   const inV = (x, y) => { const tx = x / TS, ty = y / TS; return tx > vr.x0 - 2 && tx < vr.x1 + 2 && ty > vr.y0 - 2 && ty < vr.y1 + 3; };
-  const occl = (x, y) => hidden(R3.bidx[IDX(clamp(Math.floor(x / TS), 0, G.W - 1), clamp(Math.floor(y / TS), 0, G.H - 1))]);
+  const myI = P.y >= G.RH * TS ? instAtT(Math.floor(P.x / TS), Math.floor(P.y / TS)) : null;
+  const occl = (x, y) => { if (myI ? instAtT(Math.floor(x / TS), Math.floor(y / TS)) !== myI : y >= G.RH * TS) return true; return hidden(R3.bidx[IDX(clamp(Math.floor(x / TS), 0, G.W - 1), clamp(Math.floor(y / TS), 0, G.H - 1))]); };
   // mobs
   for (const m of G.mobs) {
     if (m.dead || !inV(m.x, m.y)) continue; if (occl(m.x, m.y)) { R3.stats.culled++; continue; }

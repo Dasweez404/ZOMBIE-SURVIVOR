@@ -7,6 +7,7 @@ const PAL = {
   [T.DIRT]:   { lo: [112, 86, 62], base: [140, 110, 80], hi: [164, 132, 96] },
   [T.ROAD]:   { lo: [48, 50, 56], base: [64, 66, 72], hi: [82, 84, 90] },
   [T.FLOOR]:  { lo: [122, 88, 54], base: [150, 112, 72], hi: [172, 134, 90] },
+  [T.VOID]:   { lo: [5, 6, 10], base: [8, 10, 16], hi: [12, 14, 22] },
   [T.CONC]:   { lo: [102, 104, 108], base: [126, 128, 132], hi: [148, 150, 154] },
   [T.TILE]:   { lo: [186, 196, 206], base: [214, 222, 230], hi: [238, 244, 248] },
   [T.FLESH]:  { lo: [88, 28, 54], base: [130, 48, 84], hi: [172, 80, 114] },
@@ -329,6 +330,14 @@ function drawObj(c, o, time, shadowOnly) {
     case 'mast': blit(c, propSprite('mast', 0), x, y); c.fillStyle = G.radioOn ? (Math.sin(time * 6) > 0 ? '#5f5' : '#2a2') : '#e33'; c.beginPath(); c.arc(x, y - 20, 2.2, 0, TAU); c.fill(); if (G.radioOn) { c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = .5; blit(c, glowSprite('90,255,90'), x, y - 20, 0, .6); c.restore(); } break;
     case 'radbarrel': blit(c, propSprite('radbarrel', 0), x, y); break;
     case 'furn': blit(c, propSprite('furn', o.fv || 0), x, y); break;
+    case 'stairs': {
+      const up = o.dir === 'up', X = x - 15, Y = y - 15;
+      c.fillStyle = '#2a2420'; c.fillRect(X - 1, Y - 1, 32, 32);
+      for (let i = 0; i < 6; i++) { const t = up ? i : 5 - i; c.fillStyle = 'rgb(' + (110 + t * 18) + ',' + (92 + t * 15) + ',' + (70 + t * 12) + ')'; c.fillRect(X, Y + i * 5, 30, 4); }
+      c.fillStyle = 'rgba(255,255,255,.9)'; c.font = 'bold 15px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(up ? '▲' : '▼', x, y + 1); c.textBaseline = 'alphabetic';
+      if (Math.sin(time * 3) > .3) { c.strokeStyle = 'rgba(255,230,140,.7)'; c.lineWidth = 1.5; c.strokeRect(X, Y, 30, 30); }
+      break;
+    }
     case 'tent': dropShadow(c, x, y + 6, 22, 11, 14); blit(c, propSprite('tent', Math.floor(v * 3)), x, y); break;
     case 'sandbag': blit(c, propSprite('sandbag', 0), x, y); break;
     case 'stall': blit(c, propSprite('stall', 0), x, y); break;

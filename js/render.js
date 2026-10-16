@@ -72,6 +72,7 @@ function render(time) {
   drawClouds(c, time); drawFires(c, time); drawParts(c); drawBlasts(c); drawBolts(c); drawTutMarker(c, time);
   drawFlags(c, time);
   drawRoofs(c, cx, cy);
+  if (P.y >= G.RH * TS) { const I = instAtT(Math.floor(P.x / TS), Math.floor(P.y / TS)); if (I) { c.fillStyle = '#05060a'; c.beginPath(); c.rect(cx - 10, cy - 10, VW + 20, VH + 20); c.rect(I.gx * TS, I.gy * TS, I.w * TS, I.h * TS); c.fill('evenodd'); } } // étage : tout ce qui est hors de la pièce reste noir
   drawTexts(c);
   if (G.buildMode) drawBuildGhost(c);
   c.restore();

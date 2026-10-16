@@ -130,11 +130,22 @@ function activatePOI(p) {
     }
     if (p.type === 'bunker' && p.id === G.pois.filter(q => q.type === 'bunker')[0].id) { put('abomination'); G.bossBunker = p.id; }
   }
+  if (p.b && p.b.floors > 1) spawnUpstairs(p);
+}
+function spawnUpstairs(p, put0) {
+  if (!p.upSpots || !p.upSpots.length) return;
+  const dm = difficultyMul(), n = Math.max(1, Math.round(rint(p.b.floors - 1, p.b.floors + 1) * (p.def.z ? (p.def.z[0] + p.def.z[1]) / 8 : 1.5) * dm.cnt * 1.3));
+  for (let i = 0; i < n; i++) {
+    const s = p.upSpots[Math.floor(Math.random() * p.upSpots.length)], x = s[0] + rnd(-8, 8), y = s[1] + rnd(-8, 8);
+    if (collide(x, y, 10, false)) continue;
+    const t = G.rng.wpick([['walker', 70], ['runner', G.day >= 2 ? 16 : 4], ['crawler', 8], ['screamer', 4], ['bloater', p.type === 'hospital' ? 8 : 1], ['spitter', p.type === 'lab' ? 8 : 1]]);
+    spawnMob(t, x, y, { poi: p.id });
+  }
 }
 function updatePOIs() {
   for (const p of G.pois) {
     if (p.hidden || p.type === 'village' || p.def.friendly) continue;
-    if (!p.spawned && !p.cleared) { const d = dist(P.x, P.y, p.cx, p.cy); if (d < 1000 && (G.playTime > 45 || d < 520 || dist(p.cx, p.cy, G.spawn.x, G.spawn.y) > 1300)) activatePOI(p); }
+    if (!p.spawned && !p.cleared) { const RP = realPos(P.x, P.y), d = dist(RP.x, RP.y, p.cx, p.cy); if (d < 1000 && (G.playTime > 45 || d < 520 || dist(p.cx, p.cy, G.spawn.x, G.spawn.y) > 1300)) activatePOI(p); }
     if (p.spawned && !p.cleared) {
       if (!G.mobs.some(m => !m.dead && m.poi === p.id)) {
         p.cleared = true; msg('Zone nettoyée : ' + p.name + (p.def.claim ? ' — vous pouvez la réclamer (E sur le drapeau).' : ''), '#8affb0'); addXP(30); SFX.play('levelup');
@@ -260,18 +271,19 @@ function spawnAirdrop(ax, ay) {
   const p = { id: -1 };
 }
 function spawnAmbush() {
-  const n = 3 + Math.floor(G.day / 2); const a0 = rnd(0, TAU);
+  const RP = realPos(P.x, P.y), n = 3 + Math.floor(G.day / 2); const a0 = rnd(0, TAU);
   for (let i = 0; i < n; i++) {
-    for (let k = 0; k < 20; k++) { const a = a0 + rnd(-.5, .5), d = rnd(520, 640), x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d; if (!collide(x, y, 12, false) && !inSafeZone(x, y)) { const m = spawnMob(pick(['raider', 'raider_sg', 'raider_smg']), x, y, { ambient: true, state: 'combat' }); m.alertT = 15; break; } }
+    for (let k = 0; k < 20; k++) { const a = a0 + rnd(-.5, .5), d = rnd(520, 640), x = RP.x + Math.cos(a) * d, y = RP.y + Math.sin(a) * d; if (!collide(x, y, 12, false) && !inSafeZone(x, y)) { const m = spawnMob(pick(['raider', 'raider_sg', 'raider_smg']), x, y, { ambient: true, state: 'combat' }); m.alertT = 15; break; } }
   }
   msg('Des pillards vous tendent une embuscade !', '#ff8a7a'); SFX.play('alarm');
 }
 function spawnHorde() {
+  const RP = realPos(P.x, P.y);
   const n = Math.min(45, Math.round((4 + G.day * 2.2) * difficultyMul().cnt));
   const a0 = rnd(0, TAU); let c = 0;
   for (let i = 0; i < n; i++) {
     for (let k = 0; k < 20; k++) {
-      const a = a0 + rnd(-.7, .7), d = rnd(700, 950), x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d;
+      const a = a0 + rnd(-.7, .7), d = rnd(700, 950), x = RP.x + Math.cos(a) * d, y = RP.y + Math.sin(a) * d;
       if (x < 60 || y < 60 || x > G.W * TS - 60 || y > G.H * TS - 60 || collide(x, y, 12, false)) continue;
       if (inSafeZone(x, y)) continue;
       spawnMob(pickZombieType(true), x, y, { horde: true, state: 'chase', ambient: true }); c++; break;
@@ -279,7 +291,7 @@ function spawnHorde() {
   }
   if (c) { msg('🧟 Une horde de ' + c + ' infectés approche !', '#ff6a5a'); SFX.play('alarm'); }
   if (G.day % 7 === 0) {
-    for (let k = 0; k < 20; k++) { const a = a0 + rnd(-.3, .3), d = 850, x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d; if (!collide(x, y, 26, false)) { const b = spawnMob('abomination', x, y, { horde: true, state: 'chase', ambient: true, hpMul: .6 }); msg('☠ UNE ABOMINATION est parmi eux...', '#ff3a3a'); break; } }
+    for (let k = 0; k < 20; k++) { const a = a0 + rnd(-.3, .3), d = 850, x = RP.x + Math.cos(a) * d, y = RP.y + Math.sin(a) * d; if (!collide(x, y, 26, false)) { const b = spawnMob('abomination', x, y, { horde: true, state: 'chase', ambient: true, hpMul: .6 }); msg('☠ UNE ABOMINATION est parmi eux...', '#ff3a3a'); break; } }
   }
 }
 
@@ -311,7 +323,7 @@ function updateRadFx(dt) {
 function aliveCount(f) { let n = 0; for (const m of G.mobs) if (!m.dead && f(m)) n++; return n; }
 function updateSpawning(dt) {
   G.ambT -= dt;
-  if (G.ambT <= 0) {
+  if (G.ambT <= 0 && P.y < G.RH * TS) {
     const night = isNight(); G.ambT = night ? .9 : 2; if (G.playTime < 30) return;
     const dm = difficultyMul();
     const cap = Math.min(70, Math.round((6 + G.day * 1.5) * (night ? 1.8 : 1) * dm.cnt * (tutSafe() ? .3 : 1)));
@@ -357,6 +369,7 @@ function updateGame(dt) {
   G.clock += dt; G.dark = darkness(phaseOf(G.clock)); G.tick++;
   G.playTime += dt; if (G.droneT > 0) G.droneT -= dt; if (G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) G.combo = 0; } if (G.comboPop > 0) G.comboPop -= dt;
   if (!P.dead) updatePlayer(dt);
+  updateFollowers(dt);
   // champs de flux
   G.flowT -= dt;
   if (G.flowT <= 0) { G.flowT = .5; G.flowP.compute(Math.floor(P.x / TS), Math.floor(P.y / TS)); }

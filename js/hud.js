@@ -263,7 +263,7 @@ function mapPoiIcon(c, p, x, y) {
 }
 function drawMinimap(c, W, H, time) {
   const S = 160, x0 = W - S - 14, y0 = 14, win = 64;
-  const tx = P.x / TS, ty = P.y / TS, sx = clamp(tx - win / 2, 0, G.W - win), sy = clamp(ty - win / 2, 0, G.H - win), k = S / win;
+  const RP = realPos(P.x, P.y), tx = RP.x / TS, ty = RP.y / TS, sx = clamp(tx - win / 2, 0, G.W - win), sy = clamp(ty - win / 2, 0, G.RH - win), k = S / win;
   c.save(); rrect(c, x0, y0, S, S, 12); c.clip(); c.fillStyle = '#0a0e12'; c.fillRect(x0, y0, S, S);
   c.imageSmoothingEnabled = false; c.drawImage(G.mini, sx, sy, win, win, x0, y0, S, S);
   for (const z of G.radZones) if (z.discovered) { const px = x0 + (z.x / TS - sx) * k, py = y0 + (z.y / TS - sy) * k, rr = z.r / TS * k; c.fillStyle = 'rgba(140,255,40,.28)'; c.beginPath(); c.arc(px, py, rr, 0, TAU); c.fill(); c.strokeStyle = 'rgba(170,255,70,.85)'; c.lineWidth = 1; c.stroke(); }
@@ -278,6 +278,7 @@ function drawMinimap(c, W, H, time) {
   c.fillStyle = '#ff0'; c.beginPath(); c.arc(ppx, ppy, 3.5, 0, TAU); c.fill(); c.strokeStyle = '#000'; c.lineWidth = 1; c.stroke();
   c.restore(); c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 1.5; rrect(c, x0, y0, S, S, 12); c.stroke();
   c.font = 'bold 10px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#ff7a6a'; c.fillText('N', x0 + S / 2, y0 + 12);
+  if (RP.lv > 0) { c.font = 'bold 11px sans-serif'; c.textAlign = 'right'; c.fillStyle = '#cfe0ff'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.8)'; c.strokeText('Étage ' + RP.lv, x0 + S - 8, y0 + S - 8); c.fillText('Étage ' + RP.lv, x0 + S - 8, y0 + S - 8); }
 }
 function drawQuestTracker(c, W, H) {
   const id = G.quests.tracked; if (!id || !G.quests.active[id]) return;

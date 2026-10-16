@@ -160,6 +160,8 @@ function r3prefabs() {
   F.mast = mergeParts([P_(g.cyl, '#7a7e86', 0, 2, 0, .2, 4, .2), P_(g.box, '#6a6e76', 0, .2, 0, .8, .4, .8), P_(g.box, '#8a8e96', 0, 3.4, 0, 1.1, .08, .08), P_(g.box, '#8a8e96', 0, 2.8, 0, .08, .08, .8), P_(g.sph, '#e33', 0, 4.05, 0, .2, .2, .2)]);
   F.radbarrel = mergeParts([P_(g.cyl8, '#d8c82a', 0, .35, 0, .6, .7, .6), P_(g.cyl8, '#2a2808', 0, .71, 0, .5, .03, .5), P_(g.box, '#1a1808', 0, .36, 0, .62, .12, .62, 0, .78, 0)]);
   F.furn = [0, 1, 2].map(v => mergeParts(v === 0 ? [P_(g.box, '#7a5a3a', 0, .45, 0, .7, .9, .5), P_(g.box, '#5a3e24', 0, .45, .26, .6, .8, .04)] : v === 1 ? [P_(g.box, '#8a6a44', 0, .38, 0, .85, .08, .6), P_(g.box, '#6a4e30', -.34, .18, -.22, .08, .36, .08), P_(g.box, '#6a4e30', .34, .18, -.22, .08, .36, .08), P_(g.box, '#6a4e30', -.34, .18, .22, .08, .36, .08), P_(g.box, '#6a4e30', .34, .18, .22, .08, .36, .08)] : [P_(g.box, '#6a7a8a', 0, .25, 0, .8, .5, .6), P_(g.box, '#8a9aaa', 0, .55, -.2, .8, .3, .2)]));
+  F.stairsUp = mergeParts([0, 1, 2, 3].map(i => P_(g.box, i % 2 ? '#b09a78' : '#9a8566', 0, .1 + i * .2, .36 - i * .24, .95, .2 + i * .2, .24)).concat([P_(g.box, '#ffe9a0', 0, 1.05, -.3, .5, .05, .1)]));
+  F.stairsDown = mergeParts([P_(g.box, '#14110e', 0, .03, 0, .95, .06, .95), P_(g.box, '#7a6648', 0, .2, .4, .95, .06, .2), P_(g.box, '#6a5840', 0, .14, .12, .95, .06, .24), P_(g.box, '#5a4a36', 0, .08, -.16, .95, .06, .24), P_(g.box, '#3a8aff', 0, .3, .42, .5, .05, .1)]);
   F.tent = ['#b04a3a', '#4a6aa0', '#8a8a44'].map((c, i) => mergeParts([P_(g.pyr, c, 0, .6, 0, 1.45, 1.2, 1.25, 0, Math.PI / 4, 0), P_(g.box, '#2a1e16', 0, .3, .38, .3, .55, .02)]));
   F.sandbag = mergeParts([P_(g.box, '#a89870', -.2, .13, 0, .5, .25, .35), P_(g.box, '#b4a47c', .25, .13, 0, .5, .25, .35), P_(g.box, '#a89870', 0, .37, 0, .55, .25, .35)]);
   F.stall = mergeParts([P_(g.box, '#8a6a44', 0, .3, 0, .9, .6, .55), P_(g.box, '#c8402a', -.22, 1.05, 0, .45, .05, .75), P_(g.box, '#f2ecdc', .22, 1.05, 0, .45, .05, .75), P_(g.box, '#5a3e24', -.4, .6, .3, .05, .9, .05), P_(g.box, '#5a3e24', .4, .6, .3, .05, .9, .05)]);
@@ -188,7 +190,7 @@ function r3prefabs() {
 
 // ---------- chunks de terrain ----------
 const CHK = 16;
-const ACCENT = { house: '#c0392b', cabin: '#6a8a3a', gas: '#e8c030', farm: '#b8742a', market: '#2a7ac0', police: '#2a3f9a', hospital: '#e04a4a', warehouse: '#7a7e86', bunker: '#4a5a3a', church: '#7a4a9a', school: '#3a9a5a', diner: '#c03a34', firestation: '#b82a2a', lab: '#2ab8a0', prison: '#6a6a72', trailer: '#c0c4c8', mine: '#7a5a2a', radio: '#777777', village: '#2a8a4a', camp: '#8a1a14', legion: '#7a1f2a' };
+const ACCENT = { house: '#c0392b', cabin: '#6a8a3a', gas: '#e8c030', farm: '#b8742a', market: '#2a7ac0', police: '#2a3f9a', hospital: '#e04a4a', warehouse: '#7a7e86', bunker: '#4a5a3a', church: '#7a4a9a', school: '#3a9a5a', diner: '#c03a34', firestation: '#b82a2a', lab: '#2ab8a0', prison: '#6a6a72', trailer: '#c0c4c8', mine: '#7a5a2a', radio: '#777777', village: '#2a8a4a', camp: '#8a1a14', legion: '#7a1f2a', apartments: '#a0764a', office: '#4a8ac0', hotel: '#b04a6a' };
 function r3freeChunk(ch) {
   for (const k of ['mesh', 'water', 'win', 'objMesh']) if (ch[k]) { R3.scene.remove(ch[k]); ch[k].geometry.dispose(); }
 }

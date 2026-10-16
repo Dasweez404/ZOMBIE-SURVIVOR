@@ -1,6 +1,6 @@
 'use strict';
 // ===== Génération du monde, collisions, pathfinding =====
-const T = { GRASS: 0, FOREST: 1, SAND: 2, WATER: 3, ROAD: 4, DIRT: 5, FLOOR: 6, CONC: 7, WALLT: 8, PALI: 9, TILE: 10, FLESH: 11 };
+const T = { GRASS: 0, FOREST: 1, SAND: 2, WATER: 3, ROAD: 4, DIRT: 5, FLOOR: 6, CONC: 7, WALLT: 8, PALI: 9, TILE: 10, FLESH: 11, VOID: 12 };
 const SO = { NONE: 0, WALL: 1, OBJ: 2, STRUCT: 3, DOOR: 4, WATER: 5 };
 const DAY_LEN = 360; // secondes par jour
 
@@ -123,7 +123,10 @@ function wScale() { return G.W / 150; }
 function wDens() { const f = wScale(); return f * f / 2.4; } // nombre d'éléments : croît moins vite que la surface (monde aéré)
 function genTerrain(seed) {
   const W = G.W, H = G.H, N = W * H, st = WORLD_STYLES[G.style] || WORLD_STYLES.balanced, f = W / 150;
-  G.tiles = new Uint8Array(N); G.solid = new Uint8Array(N); G.reserve = new Uint8Array(N); G.fp = new Uint8Array(N); G.moist = new Float32Array(N);
+  G.RH = H; G.TH = H + Math.ceil(H * .12) + 10; const NT = W * G.TH; // lignes supplémentaires : les étages des bâtiments (cartes « parallèles »)
+  G.tiles = new Uint8Array(NT); G.solid = new Uint8Array(NT); G.reserve = new Uint8Array(NT); G.fp = new Uint8Array(NT); G.moist = new Float32Array(NT);
+  for (let i = N; i < NT; i++) { G.tiles[i] = T.VOID; G.solid[i] = SO.WALL; }
+  G.inst = { x: 2, y: H + 3, rowH: 0 }; G.keepAll = new Set(); G.insts = []; G.instIdx = new Int16Array(W * (G.TH - H));
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     let e = fbm(x / (st.scale * (f > 1 ? 1 + (f - 1) * .5 : 1)), y / (st.scale * (f > 1 ? 1 + (f - 1) * .5 : 1)), seed, 4) + st.off;
     const dx = (x - W / 2) / (W / 2), dy = (y - H / 2) / (H / 2), d = Math.max(Math.abs(dx), Math.abs(dy));
@@ -157,59 +160,61 @@ function genWorld(seed) {
   genRadZones(rng);
   genVehicles(rng);
   computeShore();
+  { const sh = new Uint8Array(W * G.TH).fill(255); sh.set(G.shore); G.shore = sh; } G.H = G.TH; // la grille contient désormais aussi les étages
 }
 
-// ----- accessibilité : toutes les pièces d'un bâtiment doivent être atteignables depuis une porte -----
-function reachInfo(b, passable) { // BFS depuis les portes ; retourne {reach, comps}
-  const { x, y, w, h } = b, W = G.W, reach = new Uint8Array(w * h), q = [];
+// ----- accessibilité : toutes les pièces d'un bâtiment (et de ses étages) doivent être atteignables -----
+function reachRect(R, starts, passable) { // R = {x,y,w,h} en coordonnées de grille ; starts = [[tx,ty]...]
+  const { x, y, w, h } = R, reach = new Uint8Array(w * h), q = [];
   const ok = (tx, ty) => tx >= x && ty >= y && tx < x + w && ty < y + h && passable(tx, ty);
-  for (const d of b.doors) for (let k = 0; k < 2; k++) { const tx = d.s < 2 ? d.x + k : d.x, ty = d.s < 2 ? d.y : d.y + k; if (ok(tx, ty) && !reach[(ty - y) * w + tx - x]) { reach[(ty - y) * w + tx - x] = 1; q.push(tx, ty); } }
+  for (const [tx, ty] of starts) if (ok(tx, ty) && !reach[(ty - y) * w + tx - x]) { reach[(ty - y) * w + tx - x] = 1; q.push(tx, ty); }
   for (let i = 0; i < q.length; i += 2) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const tx = q[i] + dx, ty = q[i + 1] + dy; if (ok(tx, ty) && !reach[(ty - y) * w + tx - x]) { reach[(ty - y) * w + tx - x] = 1; q.push(tx, ty); } }
   const seen = new Uint8Array(w * h), comps = [];
   for (let ty = y; ty < y + h; ty++) for (let tx = x; tx < x + w; tx++) { const li = (ty - y) * w + tx - x; if (reach[li] || seen[li] || !ok(tx, ty)) continue; const c = [], qq = [tx, ty]; seen[li] = 1; for (let i = 0; i < qq.length; i += 2) { c.push([qq[i], qq[i + 1]]); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ax = qq[i] + dx, ay = qq[i + 1] + dy, lj = (ay - y) * w + ax - x; if (ok(ax, ay) && !reach[lj] && !seen[lj]) { seen[lj] = 1; qq.push(ax, ay); } } } comps.push(c); }
   return { reach, comps };
 }
+function doorStarts(b) { const st = []; for (const d of b.doors) for (let k = 0; k < 2; k++) st.push(d.s < 2 ? [d.x + k, d.y] : [d.x, d.y + k]); return st; }
+function reachInfo(b, passable) { return reachRect({ x: b.x, y: b.y, w: b.w, h: b.h }, doorStarts(b), passable); }
+function repairRegion(R, starts, o) { repairRegion1(R, starts, o); repairRegion1(R, starts, o); } // deuxième passe : les caisses déplacées peuvent ouvrir de nouveaux passages
+function repairRegion1(R, starts, o) { // o: {ring: autorise une ouverture dans le mur extérieur, crates: liste de caisses}
+  const { x, y, w, h } = R, pass = (tx, ty) => G.solid[IDX(tx, ty)] === 0, rowOK = (tx, ty) => tx >= 0 && ty >= 0 && tx < G.W && ty < G.TH;
+  for (let iter = 0; iter < 40; iter++) {
+    const { reach, comps } = reachRect(R, starts, pass); if (!comps.length) break;
+    const inR = (tx, ty) => tx >= x && ty >= y && tx < x + w && ty < y + h && reach[(ty - y) * w + tx - x];
+    const outside = (tx, ty) => o.ring && inb(tx, ty) && !(tx >= x && ty >= y && tx < x + w && ty < y + h) && G.solid[IDX(tx, ty)] === 0 && G.tiles[IDX(tx, ty)] !== T.WATER;
+    const kindOf = (tx, ty) => { const i = IDX(tx, ty), ob = G.objs.get(i), sv = G.solid[i]; if (sv === 0) return null; const ring = tx === x || ty === y || tx === x + w - 1 || ty === y + h - 1;
+      if (!ring && G.tiles[i] === T.WALLT) return 'wall'; if (ob && ob.loot) return 'crate'; if (ob && ob.k !== 'crate' && ob.k !== 'stairs' && sv === SO.OBJ) return 'furn'; if (ring && sv === SO.WALL && o.ring) return 'ring'; return null; };
+    let best = null;
+    for (const c of comps) for (const [cx, cy] of c) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const line = []; let ok = false;
+      for (let k = 1; k <= 3; k++) { const tx = cx + dx * k, ty = cy + dy * k; if (!rowOK(tx, ty)) break; const kd = kindOf(tx, ty);
+        if (kd === null) { if (G.solid[IDX(tx, ty)] === 0 && line.length && (inR(tx, ty) || (line[line.length - 1].kd === 'ring' && outside(tx, ty)))) ok = true; break; } line.push({ tx, ty, kd }); }
+      if (!ok || !line.length) continue; if (line.some((t, i) => t.kd === 'ring' && i < line.length - 1)) continue;
+      const score = 10 - line.length * 3 + (line.every(t => t.kd === 'wall') ? 2 : 0) - (line.some(t => t.kd === 'ring') ? 4 : 0); if (!best || score > best.score) best = { line, score, fl: G.tiles[IDX(cx, cy)] };
+    }
+    if (!best) break;
+    for (const t of best.line) {
+      const i = IDX(t.tx, t.ty), ob = G.objs.get(i);
+      if (t.kd === 'crate') { const cand = []; for (let ty = y + 1; ty < y + h - 1; ty++) for (let tx = x + 1; tx < x + w - 1; tx++) if (reach[(ty - y) * w + tx - x] && G.solid[IDX(tx, ty)] === 0 && !G.objs.has(IDX(tx, ty)) && !G.keepAll.has(IDX(tx, ty))) cand.push([tx, ty]);
+        if (cand.length) { const [nx, ny] = cand[(t.tx * 7 + t.ty * 13) % cand.length]; G.objs.delete(i); G.solid[i] = 0; ob.tx = nx; ob.ty = ny; ob.x = nx * TS + TS / 2; ob.y = ny * TS + TS / 2; ob.moved = true; G.objs.set(IDX(nx, ny), ob); G.solid[IDX(nx, ny)] = SO.OBJ; } else removeObj(ob); }
+      else if (t.kd === 'furn') removeObj(ob);
+      else { G.tiles[i] = best.fl; G.solid[i] = 0; if (ob) removeObj(ob); }
+    }
+  }
+  { const rr = reachRect(R, starts, pass); for (const c of rr.comps) if (c.length <= 3) for (const [tx, ty] of c) { const ob = G.objs.get(IDX(tx, ty)); if (ob && !ob.loot) removeObj(ob); if (!ob || !ob.loot) { G.tiles[IDX(tx, ty)] = T.WALLT; G.solid[IDX(tx, ty)] = SO.WALL; } } }
+  const { reach } = reachRect(R, starts, pass); // caisses : une case voisine accessible
+  for (const ob of o.crates || []) {
+    if (ob.tx < x || ob.ty < y || ob.tx >= x + w || ob.ty >= y + h || ob.moved) continue;
+    if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const tx = ob.tx + dx, ty = ob.ty + dy; return tx >= x && ty >= y && tx < x + w && ty < y + h && reach[(ty - y) * w + tx - x]; })) continue;
+    const cand = []; for (let ty = y + 1; ty < y + h - 1; ty++) for (let tx = x + 1; tx < x + w - 1; tx++) if (reach[(ty - y) * w + tx - x] && G.solid[IDX(tx, ty)] === 0 && !G.objs.has(IDX(tx, ty)) && !G.keepAll.has(IDX(tx, ty)) && !(o.avoid || []).some(([ax, ay]) => Math.abs(tx - ax) < 3 && Math.abs(ty - ay) < 3)) cand.push([tx, ty]);
+    if (!cand.length) continue; const [nx, ny] = cand[(ob.tx * 7 + ob.ty * 13) % cand.length]; G.objs.delete(IDX(ob.tx, ob.ty)); if (G.solid[IDX(ob.tx, ob.ty)] === SO.OBJ) G.solid[IDX(ob.tx, ob.ty)] = 0;
+    ob.tx = nx; ob.ty = ny; ob.x = nx * TS + TS / 2; ob.y = ny * TS + TS / 2; ob.moved = true; G.objs.set(IDX(nx, ny), ob); G.solid[IDX(nx, ny)] = SO.OBJ;
+  }
+}
 function ensureAccess() {
-  const pass = (tx, ty) => G.solid[IDX(tx, ty)] === 0;
   for (const b of G.buildings) {
-    if (!b.doors || !b.doors.length) continue; const { x, y, w, h } = b;
-    for (let iter = 0; iter < 40; iter++) {
-      const { reach, comps } = reachInfo(b, pass); if (!comps.length) break;
-      const inR = (tx, ty) => tx >= x && ty >= y && tx < x + w && ty < y + h && reach[(ty - y) * w + tx - x];
-      const outside = (tx, ty) => inb(tx, ty) && !(tx >= x && ty >= y && tx < x + w && ty < y + h) && G.solid[IDX(tx, ty)] === 0 && G.tiles[IDX(tx, ty)] !== T.WATER;
-      let best = null;
-      const kindOf = (tx, ty) => { const i = IDX(tx, ty), o = G.objs.get(i), sv = G.solid[i]; if (sv === 0) return null; const ring = tx === x || ty === y || tx === x + w - 1 || ty === y + h - 1;
-        if (!ring && G.tiles[i] === T.WALLT) return 'wall'; if (o && o.loot) return 'crate'; if (o && o.k !== 'crate' && sv === SO.OBJ) return 'furn'; if (ring && sv === SO.WALL) return 'ring'; return null; };
-      for (const c of comps) for (const [cx, cy] of c) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const line = []; let ok = false;
-        for (let k = 1; k <= 3; k++) {
-          const tx = cx + dx * k, ty = cy + dy * k; if (!inb(tx, ty)) break; const kd = kindOf(tx, ty);
-          if (kd === null) { if (G.solid[IDX(tx, ty)] === 0 && line.length && (inR(tx, ty) || (line[line.length - 1].kd === 'ring' && outside(tx, ty)))) ok = true; break; }
-          if (kd === 'ring' && !(line.length === 0 || true)) break; line.push({ tx, ty, kd });
-        }
-        if (!ok || !line.length) continue; if (line.some((t, i) => t.kd === 'ring' && i < line.length - 1)) continue;
-        const score = 10 - line.length * 3 + (line.every(t => t.kd === 'wall') ? 2 : 0) - (line.some(t => t.kd === 'ring') ? 4 : 0); if (!best || score > best.score) best = { line, score, fl: G.tiles[IDX(cx, cy)] };
-      }
-      if (!best) break;
-      for (const t of best.line) {
-        const i = IDX(t.tx, t.ty), o = G.objs.get(i);
-        if (t.kd === 'crate') { const cand = []; for (let ty = y + 1; ty < y + h - 1; ty++) for (let tx = x + 1; tx < x + w - 1; tx++) if (reach[(ty - y) * w + tx - x] && G.solid[IDX(tx, ty)] === 0 && !G.objs.has(IDX(tx, ty)) && !b.doors.some(d => Math.abs(tx - d.x) < 3 && Math.abs(ty - d.y) < 3)) cand.push([tx, ty]);
-          if (cand.length) { const [nx, ny] = cand[(t.tx * 7 + t.ty * 13) % cand.length]; G.objs.delete(i); G.solid[i] = 0; o.tx = nx; o.ty = ny; o.x = nx * TS + TS / 2; o.y = ny * TS + TS / 2; o.moved = true; G.objs.set(IDX(nx, ny), o); G.solid[IDX(nx, ny)] = SO.OBJ; } else removeObj(o); }
-        else if (t.kd === 'furn') removeObj(o);
-        else { G.tiles[i] = best.fl; G.solid[i] = 0; if (o) removeObj(o); }
-      }
-    }
-    { const rr = reachInfo(b, pass); for (const c of rr.comps) if (c.length <= 3) for (const [tx, ty] of c) { const o = G.objs.get(IDX(tx, ty)); if (o && !o.loot) removeObj(o); if (!o) { G.tiles[IDX(tx, ty)] = T.WALLT; G.solid[IDX(tx, ty)] = SO.WALL; } } }
-    // caisses : au moins une case voisine accessible
-    const { reach } = reachInfo(b, pass);
-    for (const p of G.pois) for (const o of p.crates || []) {
-      if (o.tx < x || o.ty < y || o.tx >= x + w || o.ty >= y + h || o.moved) continue;
-      const okN = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const tx = o.tx + dx, ty = o.ty + dy; return tx >= x && ty >= y && tx < x + w && ty < y + h && reach[(ty - y) * w + tx - x]; });
-      if (okN) continue;
-      const cand = []; for (let ty = y + 1; ty < y + h - 1; ty++) for (let tx = x + 1; tx < x + w - 1; tx++) if (reach[(ty - y) * w + tx - x] && G.solid[IDX(tx, ty)] === 0 && !G.objs.has(IDX(tx, ty)) && !b.doors.some(d => Math.abs(tx - d.x) < 3 && Math.abs(ty - d.y) < 3)) cand.push([tx, ty]);
-      if (!cand.length) continue; const [nx, ny] = cand[(o.tx * 7 + o.ty * 13) % cand.length]; G.objs.delete(IDX(o.tx, o.ty)); if (G.solid[IDX(o.tx, o.ty)] === SO.OBJ) G.solid[IDX(o.tx, o.ty)] = 0;
-      o.tx = nx; o.ty = ny; o.x = nx * TS + TS / 2; o.y = ny * TS + TS / 2; o.moved = true; G.objs.set(IDX(nx, ny), o); G.solid[IDX(nx, ny)] = SO.OBJ;
-    }
+    if (!b.doors || !b.doors.length) continue; const crates = []; for (const p of G.pois) for (const o of p.crates || []) if (o.tx >= b.x && o.ty >= b.y && o.tx < b.x + b.w && o.ty < b.y + b.h) crates.push(o);
+    repairRegion({ x: b.x, y: b.y, w: b.w, h: b.h }, doorStarts(b), { ring: true, crates, avoid: b.doors.map(d => [d.x, d.y]) });
   }
 }
 function rectFree(x, y, w, h, margin) {
@@ -235,14 +240,14 @@ function inSafeZone(x, y) {
 function placePOIs(rng) {
   const W = G.W, H = G.H, cx = W / 2, cy = H / 2;
   const f = wScale(), dk = (WORLD_DENS[G.dens] || WORLD_DENS[1]).k, order = [['village', 1], ['nomads', 1]];
-  const UNIQ = { hospital: 1, police: 1, bunker: 1, legion: 1, radio: 1, market: 1, warehouse: 1, camp: 2, farm: 1, gas: 1, church: 1, school: 1, diner: 1, firestation: 1, lab: 1, lighthouse: 1, prison: 1, trailer: 1, mine: 1, hive: 1, crash: 1, graveyard: 1, funfair: 1, drivein: 1, powerplant: 1, castle: 1 };
-  for (const k of ['hospital', 'camp', 'legion', 'castle', 'drivein', 'police', 'prison', 'lab', 'hive', 'mine', 'school', 'firestation', 'church', 'trailer', 'crash', 'funfair', 'powerplant', 'graveyard', 'lighthouse', 'diner', 'market', 'warehouse', 'bunker', 'radio', 'farm', 'gas', 'cabin', 'house']) {
+  const UNIQ = { hospital: 1, police: 1, bunker: 1, legion: 1, radio: 1, market: 1, warehouse: 1, camp: 2, farm: 1, gas: 1, church: 1, school: 1, diner: 1, firestation: 1, lab: 1, lighthouse: 1, prison: 1, trailer: 1, mine: 1, hive: 1, crash: 1, graveyard: 1, funfair: 1, drivein: 1, powerplant: 1, castle: 1, apartments: 1, office: 1, hotel: 1 };
+  for (const k of ['hospital', 'camp', 'legion', 'castle', 'drivein', 'office', 'hotel', 'police', 'prison', 'lab', 'hive', 'mine', 'school', 'firestation', 'church', 'trailer', 'crash', 'funfair', 'powerplant', 'graveyard', 'lighthouse', 'diner', 'market', 'warehouse', 'bunker', 'radio', 'apartments', 'farm', 'gas', 'cabin', 'house']) {
     if (k === 'nomads') continue;
     const sparse = ['house', 'cabin', 'farm', 'gas', 'camp'].includes(k) ? .55 : .8; // monde aéré : moins de lieux, plus d'espace
     const n = Math.max(UNIQ[k] || 3, Math.round(POICOUNT[k] * wDens() * dk * sparse * (f < 1 ? 1.25 : 1)));
     for (let i = 0; i < n; i++) order.push([k, 1]);
   }
-  const rng_d = { nomads: [18, 40], church: [12, 60], school: [18, 56], diner: [10, 60], firestation: [18, 56], lab: [30, 58], lighthouse: [20, 62], prison: [34, 60], trailer: [14, 60], mine: [26, 60], hive: [46, 64], crash: [20, 62], funfair: [20, 58], drivein: [16, 58], powerplant: [30, 62], castle: [36, 62], graveyard: [12, 60], village: [26, 34], hospital: [24, 55], police: [18, 50], market: [20, 55], warehouse: [26, 60], bunker: [46, 64], legion: [44, 64], camp: [24, 58], radio: [34, 62], farm: [16, 60], gas: [12, 60], cabin: [14, 62], house: [8, 64] };
+  const rng_d = { nomads: [18, 40], church: [12, 60], school: [18, 56], diner: [10, 60], firestation: [18, 56], lab: [30, 58], lighthouse: [20, 62], prison: [34, 60], trailer: [14, 60], mine: [26, 60], hive: [46, 64], crash: [20, 62], funfair: [20, 58], drivein: [16, 58], powerplant: [30, 62], castle: [36, 62], graveyard: [12, 60], village: [26, 34], hospital: [24, 55], police: [18, 50], market: [20, 55], warehouse: [26, 60], bunker: [46, 64], legion: [44, 64], camp: [24, 58], radio: [34, 62], farm: [16, 60], gas: [12, 60], cabin: [14, 62], house: [8, 64], apartments: [12, 58], office: [20, 58], hotel: [22, 60] };
   let id = 0;
   for (const [type] of order) {
     const def = POITYPES[type]; let placed = false;
@@ -312,6 +317,7 @@ function interiorTiles(p, b) {
   for (let ty = b.y + 1; ty < b.y + b.h - 1; ty++) for (let tx = b.x + 1; tx < b.x + b.w - 1; tx++) if (G.solid[IDX(tx, ty)] === 0) {
     // éviter les cases devant les portes
     let near = false; for (const d of b.doors) if (Math.abs(tx - d.x) < 3 && Math.abs(ty - d.y) < 3) near = true;
+    if (b.keep && b.keep.has(IDX(tx, ty))) near = true;
     if (!near) list.push([tx, ty]);
   }
   return list;
@@ -340,6 +346,70 @@ function addCrate(p, tx, ty, rng, lootKey, extra) {
   p.crates.push(o); return o;
 }
 
+
+// ===== Étages : chaque étage est un rectangle dans les lignes supplémentaires de la grille =====
+function instAtT(tx, ty) { if (ty < G.RH || tx < 0 || tx >= G.W || ty >= G.TH) return null; const k = G.instIdx[(ty - G.RH) * G.W + tx]; return k ? G.insts[k - 1] : null; }
+function realPos(x, y) { // position pixel → position « réelle » sur la carte (empreinte du bâtiment) + étage
+  if (y < G.RH * TS) return { x, y, lv: 0, b: null };
+  const I = instAtT(Math.floor(x / TS), Math.floor(y / TS)); if (!I) return { x, y, lv: 0, b: null };
+  return { x: x - (I.gx - I.b.x) * TS, y: y - (I.gy - I.b.y) * TS, lv: I.L, b: I.b };
+}
+function lvOfPos(x, y) { return y < G.RH * TS ? 0 : realPos(x, y).lv; }
+function allocInst(w, h) {
+  const I = G.inst;
+  if (I.x + w + 2 > G.W - 2) { I.x = 2; I.y += I.rowH + 2; I.rowH = 0; }
+  if (I.y + h + 1 > G.TH) return null;
+  const r = { gx: I.x, gy: I.y }; I.x += w + 2; I.rowH = Math.max(I.rowH, h); return r;
+}
+function planStairs(b, rng) { // cage d'escalier contre le mur nord ; zone réservée pour les meubles
+  if (b.w < 6 || b.h < 6) return false;
+  const px = b.x + (b.w >> 1), cand = [];
+  for (let rx = b.x + 2; rx <= b.x + b.w - 4; rx++) {
+    if (b.w >= 9 && (Math.abs(rx - px) <= 1 || Math.abs(rx + 1 - px) <= 1)) continue;
+    if (b.doors.some(d => Math.abs(d.x - rx) < 4 && Math.abs(d.y - (b.y + 1)) < 4 && (d.s !== 1 || b.h < 7))) continue;
+    let ok = true; for (let dy = 0; dy < 3 && ok; dy++) for (let dx = 0; dx < 2 && ok; dx++) { const i = IDX(rx + dx, b.y + 1 + dy); if (G.solid[i] !== 0 || G.objs.has(i)) ok = false; }
+    if (ok) cand.push(rx);
+  }
+  if (!cand.length) return false;
+  const rx = cand[rng.int(0, cand.length - 1)], ry = b.y + 1;
+  b.stair = { rx, ry }; b.keep = new Set();
+  for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 2; dx++) { b.keep.add(IDX(rx + dx, ry + dy)); G.keepAll.add(IDX(rx + dx, ry + dy)); }
+  addObj(rx + 1, ry, 'stairs', { solid: 1, dir: 'up', bi: -1, to: 1 });
+  b.floors = 1; b.lv = [{ gx: b.x, gy: b.y }];
+  return true;
+}
+function buildFloors(p, b, rng, n, floorT) {
+  if (!b.stair) return;
+  const bi = G.buildings.indexOf(b); b.stairObj = G.objs.get(IDX(b.stair.rx + 1, b.stair.ry)); if (b.stairObj) b.stairObj.bi = bi;
+  const { rx, ry } = b.stair, px = b.x + (b.w >> 1); p.upSpots = p.upSpots || [];
+  for (let L = 1; L <= n; L++) {
+    const r = allocInst(b.w, b.h); if (!r) break;
+    const ox = r.gx - b.x, oy = r.gy - b.y;
+    G.insts.push({ b, bi, L, gx: r.gx, gy: r.gy, w: b.w, h: b.h }); const ik = G.insts.length;
+    for (let ty = b.y; ty < b.y + b.h; ty++) for (let tx = b.x; tx < b.x + b.w; tx++) {
+      const gx = tx + ox, gy = ty + oy, edge = tx === b.x || ty === b.y || tx === b.x + b.w - 1 || ty === b.y + b.h - 1;
+      setTile(gx, gy, edge ? T.WALLT : floorT, edge ? SO.WALL : 0); G.instIdx[(gy - G.RH) * G.W + gx] = ik; G.reserve[IDX(gx, gy)] = 1;
+    }
+    // cloisons : un mur central et (grands bâtiments) un mur transversal, avec passages
+    if (b.w >= 9) { for (let ty = b.y + 1; ty < b.y + b.h - 1; ty++) setTile(px + ox, ty + oy, T.WALLT, SO.WALL); const gy = b.y + 2 + rng.int(0, Math.max(0, b.h - 6)); setTile(px + ox, gy + oy, floorT, 0); setTile(px + ox, gy + 1 + oy, floorT, 0); }
+    if (b.h >= 9) { const py = b.y + (b.h >> 1); for (let tx = b.x + 1; tx < b.x + b.w - 1; tx++) if (G.solid[IDX(tx + ox, py + oy)] === 0) setTile(tx + ox, py + oy, T.WALLT, SO.WALL); const gx = b.x + 2 + rng.int(0, Math.max(0, b.w - 6)); setTile(gx + ox, py + oy, floorT, 0); setTile(gx + 1 + ox, py + oy, floorT, 0); }
+    for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 2; dx++) { const i = IDX(rx + dx + ox, ry + dy + oy); G.tiles[i] = floorT; G.solid[i] = 0; G.keepAll.add(i); }
+    addObj(rx + ox, ry + oy, 'stairs', { solid: 1, dir: 'down', bi, to: L - 1 });
+    if (L < n) addObj(rx + 1 + ox, ry + oy, 'stairs', { solid: 1, dir: 'up', bi, to: L + 1 });
+    b.lv[L] = { gx: r.gx, gy: r.gy, ox, oy };
+    // contenu : caisses, meubles, points d'apparition
+    const tiles = []; for (let ty = b.y + 1; ty < b.y + b.h - 1; ty++) for (let tx = b.x + 1; tx < b.x + b.w - 1; tx++) { const i = IDX(tx + ox, ty + oy); if (G.solid[i] === 0 && !G.objs.has(i) && !b.keep.has(IDX(tx, ty))) tiles.push([tx + ox, ty + oy]); }
+    shuffleArr(tiles, rng);
+    const nC = Math.max(1, Math.round(rng.int(p.def.n_c[0], p.def.n_c[1]) * (L === n ? .7 : .5)));
+    for (let i = 0; i < nC && tiles.length; i++) { const [tx, ty] = tiles.pop(); addCrate(p, tx, ty, rng, p.def.loot, null); }
+    const nf = Math.floor(tiles.length / 12); for (let i = 0; i < nf; i++) { const [tx, ty] = tiles.pop(); addObj(tx, ty, 'furn', { solid: 1, fv: rng.int(0, 2) }); }
+    const crates = p.crates.filter(o => o.tx >= r.gx && o.ty >= r.gy && o.tx < r.gx + b.w && o.ty < r.gy + b.h);
+    repairRegion({ x: r.gx, y: r.gy, w: b.w, h: b.h }, [[rx + ox, ry + 1 + oy], [rx + 1 + ox, ry + 1 + oy]], { ring: false, crates, avoid: [[rx + ox, ry + oy], [rx + 1 + ox, ry + oy]] });
+    for (const [tx, ty] of tiles.slice(-8)) if (G.solid[IDX(tx, ty)] === 0) p.upSpots.push([tx * TS + 16, ty * TS + 16, L]);
+  }
+  b.floors = b.lv.length;
+}
+
 function buildPOI(p, rng) {
   const def = p.def, t = p.type;
   if (t === 'village') return buildVillage(p, rng);
@@ -356,6 +426,8 @@ function buildPOI(p, rng) {
   const b = makeBuilding(p.x, p.y, p.w, p.h, floorT, rng, { roof: def.roof, sides, partition: big && p.w >= 13 && t !== 'church', style: def.style });
   if (t === 'firestation') { const d = b.doors[0]; for (let k = 2; k < 4; k++) setTile(d.x + k, d.y, floorT, 0); }
   p.b = b; p.front = b.doors[0];
+  const nUp = def.floors ? rng.int(def.floors[0], def.floors[1]) : (t === 'house' && rng.chance(.38) ? 1 : 0);
+  if (nUp) planStairs(b, rng);
   decorBuilding(p, b, rng);
   const tiles = interiorTiles(p, b).filter(([x, y]) => !G.objs.has(IDX(x, y)));
   // rotation aléatoire
@@ -375,6 +447,7 @@ function buildPOI(p, rng) {
   // points de spawn zombies
   p.zspots = tiles.slice(-14).map(([tx, ty]) => [tx * TS + 16, ty * TS + 16]);
   if (!p.zspots.length) p.zspots = [[p.cx, p.cy]];
+  if (nUp && b.stair) buildFloors(p, b, rng, nUp, floorT);
   if (t === 'farm') { // petits champs devant
     for (let i = 0; i < 6; i++) { const tx = p.x + 1 + i, ty = p.y + p.h + 3; if (inb(tx, ty) && tx < p.x + p.w) setTile(tx, ty, T.DIRT, 0); }
   }
@@ -382,7 +455,7 @@ function buildPOI(p, rng) {
 
 function decorBuilding(p, b, rng) {
   const t = p.type, cx = b.x + (b.w >> 1);
-  const put = (x, y, k, props) => { if (inb(x, y) && G.solid[IDX(x, y)] === 0 && !G.objs.has(IDX(x, y))) addObj(x, y, k, Object.assign({ solid: 1 }, props || {})); };
+  const put = (x, y, k, props) => { if (inb(x, y) && G.solid[IDX(x, y)] === 0 && !G.objs.has(IDX(x, y)) && !(b.keep && b.keep.has(IDX(x, y)))) addObj(x, y, k, Object.assign({ solid: 1 }, props || {})); };
   const nearDoor = (x, y) => b.doors.some(d => Math.abs(x - d.x) < 3 && Math.abs(y - d.y) < 3);
   if (t === 'church') {
     put(cx, b.y + 2, 'altar');

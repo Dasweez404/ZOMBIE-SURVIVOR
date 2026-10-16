@@ -209,13 +209,13 @@ function mapLegend() {
 }
 function drawFullMap() {
   const cv = $('mapCanvas'); if (!cv) return; const c = cv.getContext('2d'), S = cv.width, k = S / G.W;
-  c.fillStyle = '#0a0e12'; c.fillRect(0, 0, S, S); c.imageSmoothingEnabled = false; c.drawImage(G.mini, 0, 0, S, S);
+  c.fillStyle = '#0a0e12'; c.fillRect(0, 0, S, S); c.imageSmoothingEnabled = false; c.drawImage(G.mini, 0, 0, G.W, G.RH, 0, 0, S, S);
   for (const z of G.radZones) if (z.discovered) { c.fillStyle = 'rgba(140,255,40,.3)'; c.beginPath(); c.arc(z.x / TS * k, z.y / TS * k, z.r / TS * k, 0, TAU); c.fill(); c.strokeStyle = '#9aff4a'; c.lineWidth = 1.5; c.stroke(); c.font = '14px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText('☢️', z.x / TS * k, z.y / TS * k + 5); }
   for (const v of G.vehicles) if (G.explored[IDX(Math.floor(v.x / TS), Math.floor(v.y / TS))]) { c.font = '13px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(v.def.i, v.x / TS * k, v.y / TS * k + 4); }
   for (const p of G.pois) if (p.discovered && !p.hidden) mapPoiIcon(c, p, p.cx / TS * k, p.cy / TS * k);
   if (G.airdrop && G.airdrop.o && !G.airdrop.o.opened) { c.font = '18px sans-serif'; c.textAlign = 'center'; c.fillText('📦', G.airdrop.x / TS * k, G.airdrop.y / TS * k); }
   const id = G.quests.tracked; if (id && G.quests.active[id]) { const st = G.quests.active[id], tg = questTargetPos(questDef(id, st), st); if (tg) { c.strokeStyle = '#ffd24a'; c.lineWidth = 3; c.beginPath(); c.arc(tg.x / TS * k, tg.y / TS * k, 14, 0, TAU); c.stroke(); } }
-  c.fillStyle = '#ff0'; c.beginPath(); c.arc(P.x / TS * k, P.y / TS * k, 5, 0, TAU); c.fill(); c.strokeStyle = '#000'; c.lineWidth = 1.5; c.stroke();
+  c.fillStyle = '#ff0'; c.beginPath(); c.arc(realPos(P.x, P.y).x / TS * k, realPos(P.x, P.y).y / TS * k, 5, 0, TAU); c.fill(); c.strokeStyle = '#000'; c.lineWidth = 1.5; c.stroke();
 }
 
 // ----- base & coffre -----

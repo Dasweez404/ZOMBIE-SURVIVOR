@@ -223,7 +223,7 @@ function ambientTemp() {
   const nightB = { [T.GRASS]: -26, [T.FOREST]: -22, [T.SAND]: -36, [T.DIRT]: -34, [T.ROAD]: -26, [T.FLOOR]: -22, [T.CONC]: -26 }[t] || -26;
   let a = lerp(dayB, nightB, clamp(G.dark / .8, 0, 1));
   G.inside = false;
-  for (const b of G.buildings) if (P.x > b.x * TS && P.x < (b.x + b.w) * TS && P.y > b.y * TS && P.y < (b.y + b.h) * TS) { a = a * .5 + 8; G.inside = true; break; }
+  if (P.y >= G.RH * TS) { a = a * .5 + 8; G.inside = true; } else for (const b of G.buildings) if (P.x > b.x * TS && P.x < (b.x + b.w) * TS && P.y > b.y * TS && P.y < (b.y + b.h) * TS) { a = a * .5 + 8; G.inside = true; break; }
   let fire = 0;
   for (const s of G.structs.values()) if (s.type === 'campfire') { const d = dist(P.x, P.y, s.x, s.y); if (d < 170) fire = Math.max(fire, 1 - d / 170); }
   if (!G.fireObjs) G.fireObjs = [...G.objs.values()].filter(o => o.k === 'fire');
@@ -307,6 +307,7 @@ function findInteract() {
     if (o && !o.dep) {
       const d = dist(P.x, P.y, o.x, o.y);
       if (o.k === 'crate' && !o.opened && d < 56) consider(d, { t: 'crate', o, text: o.air ? 'Ouvrir le largage' : 'Fouiller la caisse' });
+      else if (o.k === 'stairs' && d < 60) { const b = G.buildings[o.bi]; consider(d - 6, { t: 'stairs', o, text: o.dir === 'up' ? '⬆ Monter à l\'étage ' + o.to + (o.to >= (b.floors - 1) ? ' (dernier)' : '') : '⬇ Descendre ' + (o.to === 0 ? 'au rez-de-chaussée' : 'à l\'étage ' + o.to) }); }
       else if (o.k === 'mast' && d < 60 && !G.radioOn) consider(d, { t: 'mast', o, text: 'Réactiver l\'émetteur radio' });
       else if (HARV[o.k] && d < 52) consider(d, { t: 'harv', o, text: HARV[o.k].verb });
     }
@@ -342,6 +343,7 @@ function interact() {
   switch (it.t) {
     case 'crate': openCrate(it.o); break;
     case 'mast': activateRadio(it.o); break;
+    case 'stairs': useStairs(it.o); break;
     case 'harv': {
       if (P.useCd > 0) return; const h = HARV[it.o.k]; P.useCd = h.tool ? .4 : .2;
       let wd = null, mult = 0;
@@ -362,6 +364,25 @@ function interact() {
     case 'veh': enterVehicle(it.v); break;
     case 'exitveh': exitVehicle(); break;
   }
+}
+// ----- escaliers : l'étage est un rectangle de la grille ; on y est téléporté (et les alliés / poursuivants suivent) -----
+function stairArrival(b, to, up) {
+  const { rx, ry } = b.stair, l = b.lv[to] || { ox: 0, oy: 0 }, ox = l.ox || 0, oy = l.oy || 0;
+  return { x: (rx + (up ? 0 : 1) + ox) * TS + TS / 2, y: (ry + 1 + oy) * TS + TS / 2 + 4 };
+}
+function useStairs(o) {
+  if (P.veh || !G.buildings[o.bi] || !G.buildings[o.bi].lv[o.to]) return;
+  const b = G.buildings[o.bi], a = stairArrival(b, o.to, o.dir === 'up'), fx = P.x, fy = P.y;
+  P.x = a.x; P.y = a.y; P.vx = 0; P.vy = 0; G.cam.x = P.x - VW / 2; G.cam.y = P.y - VH / 2;
+  SFX.play('click', .8); G.lastExpX = -1; G.flowDirty = true;
+  banner(o.to === 0 ? 'Rez-de-chaussée' : 'Étage ' + o.to, b.floors > 2 ? (o.to + 1) + ' niveaux dans ce bâtiment' : '', '#cfe0ff');
+  for (const f of G.friends) if (!f.dead && f.kind !== 'guard' && dist(f.x, f.y, fx, fy) < 320) { f.x = a.x + rnd(-24, 24); f.y = a.y + rnd(-6, 24); }
+  for (const m of G.mobs) if (!m.dead && m.def.fac !== 'wild' && (m.state === 'chase' || m.state === 'combat' || m.aggro) && dist(m.x, m.y, fx, fy) < 240 && !m.boss) { (G.followers = G.followers || []).push({ m, t: .8 + dist(m.x, m.y, fx, fy) / 180, x: a.x + rnd(-20, 20), y: a.y + 28 }); }
+}
+function updateFollowers(dt) {
+  if (!G.followers || !G.followers.length) return;
+  for (const f of G.followers) { f.t -= dt; if (f.t <= 0 && !f.m.dead) { f.m.x = f.x; f.m.y = f.y; f.m.state = 'chase'; f.m.alertT = 8; f.done = 1; } else if (f.m.dead) f.done = 1; }
+  G.followers = G.followers.filter(f => !f.done);
 }
 function nearestOwnedBase() { let b = null, bd = 1e9; for (const p of G.pois) if (p.owned) { const d = dist(P.x, P.y, p.cx, p.cy); if (d < bd) { bd = d; b = p; } } return b; }
 function drinkWater() {
@@ -431,15 +452,15 @@ function finishSleep() {
 
 // ---------- Exploration (brouillard de guerre) ----------
 function updateExploration() {
-  const tx = Math.floor(P.x / TS), ty = Math.floor(P.y / TS);
+  const RP = realPos(P.x, P.y), tx = Math.floor(RP.x / TS), ty = Math.floor(RP.y / TS);
   if (tx === G.lastExpX && ty === G.lastExpY) return; G.lastExpX = tx; G.lastExpY = ty;
   revealAround(tx, ty, 15);
-  for (const z of G.radZones) if (!z.discovered && dist(P.x, P.y, z.x, z.y) < z.r + 15 * TS) { z.discovered = true; msg('☢️ Zone radioactive repérée sur la carte.', '#9aff4a'); }
-  for (const p of G.pois) if (!p.discovered && dist(P.x, P.y, p.cx, p.cy) < 16 * TS) { p.discovered = true; if (!p.hidden) { msg('Découvert : ' + p.name, '#a0d0ff'); } }
+  for (const z of G.radZones) if (!z.discovered && dist(RP.x, RP.y, z.x, z.y) < z.r + 15 * TS) { z.discovered = true; msg('☢️ Zone radioactive repérée sur la carte.', '#9aff4a'); }
+  for (const p of G.pois) if (!p.discovered && dist(RP.x, RP.y, p.cx, p.cy) < 16 * TS) { p.discovered = true; if (!p.hidden) { msg('Découvert : ' + p.name, '#a0d0ff'); } }
 }
 function revealAround(tx, ty, R) {
   const W = G.W; let ch = false;
-  for (let y = Math.max(0, ty - R); y <= Math.min(G.H - 1, ty + R); y++) for (let x = Math.max(0, tx - R); x <= Math.min(W - 1, tx + R); x++) {
+  for (let y = Math.max(0, ty - R); y <= Math.min(G.RH - 1, ty + R); y++) for (let x = Math.max(0, tx - R); x <= Math.min(W - 1, tx + R); x++) {
     if ((x - tx) * (x - tx) + (y - ty) * (y - ty) > R * R) continue; const i = y * W + x;
     if (!G.explored[i]) { G.explored[i] = 1; ch = true; paintMini(x, y); }
   }
