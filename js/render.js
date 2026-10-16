@@ -114,7 +114,7 @@ function drawMinesThrown(c, time) {
   for (const g of G.thrown) {
     const z = g.z || 0;
     c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(g.x, g.y + 3, 5, 3, 0, 0, TAU); c.fill();
-    if (g.state === 'flare') { c.fillStyle = '#ff5050'; c.beginPath(); c.arc(g.x, g.y, 3, 0, TAU); c.fill(); continue; }
+    if (g.state === 'flare') { c.fillStyle = g.k === 'glow' ? '#50ff90' : '#ff5050'; c.beginPath(); c.arc(g.x, g.y, 3, 0, TAU); c.fill(); continue; }
     c.fillStyle = { grenade: '#4a6a3a', molotov: '#8a5a2a', flare: '#c33', smoke: '#aab', flash: '#fff', cluster: '#6a4a3a', gas: '#9acd32', incend: '#e07a2a', decoy: '#4aa', beacon: '#e33' }[g.k] || '#d33';
     c.beginPath(); c.arc(g.x, g.y - z, 5, 0, TAU); c.fill();
   }

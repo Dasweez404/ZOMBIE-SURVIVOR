@@ -130,3 +130,5 @@ h3 small{color:var(--mut);font-weight:400}
 #seedinfo b{color:var(--ac2);font-variant-numeric:tabular-nums}
 
 .dur{display:inline-block;width:70px;height:6px;border-radius:3px;background:rgba(255,255,255,.14);vertical-align:middle;overflow:hidden}.dur i{display:block;height:100%}
+
+.item .desc{color:#9fb0c0;font-size:11px;line-height:1.35;display:inline-block;margin-top:1px}.item .desc b{color:#ffd890;font-weight:600}.item .desc .scr{color:#8affb0;opacity:.85}.item .nm small.desc{white-space:normal}

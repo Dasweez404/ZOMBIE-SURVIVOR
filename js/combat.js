@@ -300,7 +300,7 @@ function updateThrown(dt) {
         else if (g.k === 'cluster') { g.state = 'cluster'; g.life = 1.3; g.tick = 0; g.n = 0; explode(g.x, g.y, 70, 90, { team: 'f', cause: 'votre grenade' }); }
         else if (g.k === 'decoy') { g.state = 'decoy'; g.life = 22; g.tick = 0; }
         else if (g.k === 'beacon') { g.state = 'beacon'; g.life = 18; }
-        else if (g.k === 'flare') { g.state = 'flare'; g.life = 75; }
+        else if (g.k === 'flare' || g.k === 'glow') { g.state = 'flare'; g.life = g.k === 'glow' ? 90 : 75; }
         else if (g.k === 'cracker') { g.state = 'cracker'; g.life = 9; g.tick = 0; }
         else g.state = 'fuse';
       }

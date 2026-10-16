@@ -149,6 +149,7 @@ function genWorld(seed) {
   const cx = W >> 1, cy = H >> 1;
   G.spawn = { x: cx * TS + 16, y: cy * TS + 16 };
   placePOIs(rng);
+  if (!(typeof window !== 'undefined' && window.__noFix)) ensureAccess();
   carveRoads(rng);
   scatterObjects(rng);
   spawnAnimals(rng);
@@ -158,6 +159,59 @@ function genWorld(seed) {
   computeShore();
 }
 
+// ----- accessibilité : toutes les pièces d'un bâtiment doivent être atteignables depuis une porte -----
+function reachInfo(b, passable) { // BFS depuis les portes ; retourne {reach, comps}
+  const { x, y, w, h } = b, W = G.W, reach = new Uint8Array(w * h), q = [];
+  const ok = (tx, ty) => tx >= x && ty >= y && tx < x + w && ty < y + h && passable(tx, ty);
+  for (const d of b.doors) for (let k = 0; k < 2; k++) { const tx = d.s < 2 ? d.x + k : d.x, ty = d.s < 2 ? d.y : d.y + k; if (ok(tx, ty) && !reach[(ty - y) * w + tx - x]) { reach[(ty - y) * w + tx - x] = 1; q.push(tx, ty); } }
+  for (let i = 0; i < q.length; i += 2) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const tx = q[i] + dx, ty = q[i + 1] + dy; if (ok(tx, ty) && !reach[(ty - y) * w + tx - x]) { reach[(ty - y) * w + tx - x] = 1; q.push(tx, ty); } }
+  const seen = new Uint8Array(w * h), comps = [];
+  for (let ty = y; ty < y + h; ty++) for (let tx = x; tx < x + w; tx++) { const li = (ty - y) * w + tx - x; if (reach[li] || seen[li] || !ok(tx, ty)) continue; const c = [], qq = [tx, ty]; seen[li] = 1; for (let i = 0; i < qq.length; i += 2) { c.push([qq[i], qq[i + 1]]); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ax = qq[i] + dx, ay = qq[i + 1] + dy, lj = (ay - y) * w + ax - x; if (ok(ax, ay) && !reach[lj] && !seen[lj]) { seen[lj] = 1; qq.push(ax, ay); } } } comps.push(c); }
+  return { reach, comps };
+}
+function ensureAccess() {
+  const pass = (tx, ty) => G.solid[IDX(tx, ty)] === 0;
+  for (const b of G.buildings) {
+    if (!b.doors || !b.doors.length) continue; const { x, y, w, h } = b;
+    for (let iter = 0; iter < 40; iter++) {
+      const { reach, comps } = reachInfo(b, pass); if (!comps.length) break;
+      const inR = (tx, ty) => tx >= x && ty >= y && tx < x + w && ty < y + h && reach[(ty - y) * w + tx - x];
+      const outside = (tx, ty) => inb(tx, ty) && !(tx >= x && ty >= y && tx < x + w && ty < y + h) && G.solid[IDX(tx, ty)] === 0 && G.tiles[IDX(tx, ty)] !== T.WATER;
+      let best = null;
+      const kindOf = (tx, ty) => { const i = IDX(tx, ty), o = G.objs.get(i), sv = G.solid[i]; if (sv === 0) return null; const ring = tx === x || ty === y || tx === x + w - 1 || ty === y + h - 1;
+        if (!ring && G.tiles[i] === T.WALLT) return 'wall'; if (o && o.loot) return 'crate'; if (o && o.k !== 'crate' && sv === SO.OBJ) return 'furn'; if (ring && sv === SO.WALL) return 'ring'; return null; };
+      for (const c of comps) for (const [cx, cy] of c) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const line = []; let ok = false;
+        for (let k = 1; k <= 3; k++) {
+          const tx = cx + dx * k, ty = cy + dy * k; if (!inb(tx, ty)) break; const kd = kindOf(tx, ty);
+          if (kd === null) { if (G.solid[IDX(tx, ty)] === 0 && line.length && (inR(tx, ty) || (line[line.length - 1].kd === 'ring' && outside(tx, ty)))) ok = true; break; }
+          if (kd === 'ring' && !(line.length === 0 || true)) break; line.push({ tx, ty, kd });
+        }
+        if (!ok || !line.length) continue; if (line.some((t, i) => t.kd === 'ring' && i < line.length - 1)) continue;
+        const score = 10 - line.length * 3 + (line.every(t => t.kd === 'wall') ? 2 : 0) - (line.some(t => t.kd === 'ring') ? 4 : 0); if (!best || score > best.score) best = { line, score, fl: G.tiles[IDX(cx, cy)] };
+      }
+      if (!best) break;
+      for (const t of best.line) {
+        const i = IDX(t.tx, t.ty), o = G.objs.get(i);
+        if (t.kd === 'crate') { const cand = []; for (let ty = y + 1; ty < y + h - 1; ty++) for (let tx = x + 1; tx < x + w - 1; tx++) if (reach[(ty - y) * w + tx - x] && G.solid[IDX(tx, ty)] === 0 && !G.objs.has(IDX(tx, ty)) && !b.doors.some(d => Math.abs(tx - d.x) < 3 && Math.abs(ty - d.y) < 3)) cand.push([tx, ty]);
+          if (cand.length) { const [nx, ny] = cand[(t.tx * 7 + t.ty * 13) % cand.length]; G.objs.delete(i); G.solid[i] = 0; o.tx = nx; o.ty = ny; o.x = nx * TS + TS / 2; o.y = ny * TS + TS / 2; o.moved = true; G.objs.set(IDX(nx, ny), o); G.solid[IDX(nx, ny)] = SO.OBJ; } else removeObj(o); }
+        else if (t.kd === 'furn') removeObj(o);
+        else { G.tiles[i] = best.fl; G.solid[i] = 0; if (o) removeObj(o); }
+      }
+    }
+    { const rr = reachInfo(b, pass); for (const c of rr.comps) if (c.length <= 3) for (const [tx, ty] of c) { const o = G.objs.get(IDX(tx, ty)); if (o && !o.loot) removeObj(o); if (!o) { G.tiles[IDX(tx, ty)] = T.WALLT; G.solid[IDX(tx, ty)] = SO.WALL; } } }
+    // caisses : au moins une case voisine accessible
+    const { reach } = reachInfo(b, pass);
+    for (const p of G.pois) for (const o of p.crates || []) {
+      if (o.tx < x || o.ty < y || o.tx >= x + w || o.ty >= y + h || o.moved) continue;
+      const okN = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const tx = o.tx + dx, ty = o.ty + dy; return tx >= x && ty >= y && tx < x + w && ty < y + h && reach[(ty - y) * w + tx - x]; });
+      if (okN) continue;
+      const cand = []; for (let ty = y + 1; ty < y + h - 1; ty++) for (let tx = x + 1; tx < x + w - 1; tx++) if (reach[(ty - y) * w + tx - x] && G.solid[IDX(tx, ty)] === 0 && !G.objs.has(IDX(tx, ty)) && !b.doors.some(d => Math.abs(tx - d.x) < 3 && Math.abs(ty - d.y) < 3)) cand.push([tx, ty]);
+      if (!cand.length) continue; const [nx, ny] = cand[(o.tx * 7 + o.ty * 13) % cand.length]; G.objs.delete(IDX(o.tx, o.ty)); if (G.solid[IDX(o.tx, o.ty)] === SO.OBJ) G.solid[IDX(o.tx, o.ty)] = 0;
+      o.tx = nx; o.ty = ny; o.x = nx * TS + TS / 2; o.y = ny * TS + TS / 2; o.moved = true; G.objs.set(IDX(nx, ny), o); G.solid[IDX(nx, ny)] = SO.OBJ;
+    }
+  }
+}
 function rectFree(x, y, w, h, margin) {
   if (x - margin < 3 || y - margin < 3 || x + w + margin > G.W - 3 || y + h + margin > G.H - 3) return false;
   for (let ty = y - margin; ty < y + h + margin; ty++) for (let tx = x - margin; tx < x + w + margin; tx++) {

@@ -42,7 +42,7 @@ function updatePlayer(dt) {
 
   // bruit des pas
   P.noiseT -= dt;
-  if (P.noiseT <= 0 && P.moving && !P.veh) { P.noiseT = .6; makeNoise(P.x, P.y, (P.sprint ? 230 : 95) * (1 - Math.min(.75, armorSum('stealth'))), true); }
+  if (P.noiseT <= 0 && P.moving && !P.veh) { P.noiseT = .6; makeNoise(P.x, P.y, (P.sprint ? 230 : 95) * (1 - Math.min(.8, armorSum('stealth') + buffOf('stealth'))), true); }
 
   // timers
   if (P.perfectT > 0) P.perfectT -= dt;
@@ -199,16 +199,16 @@ function survivalTick(dt) {
   // radiations
   const rl = radAt(P.x, P.y), res = radResist(); G.radLv = rl * (1 - res);
   if (rl > 0) {
-    P.rad = Math.min(100, P.rad + rl * (1 - res) * dt);
-    if (!P.radWarn) { msg('☢️ ZONE RADIOACTIVE ! Combinaison NRBC/masque à gaz requis, ou quittez la zone.', '#9aff4a'); SFX.play('alarm', .5); P.radWarn = true; }
+    P.rad = Math.min(100, P.rad + rl * (1 - res) * dt * .55);
+    if (!P.radWarn) { msg('☢️ Zone radioactive : quittez-la, la radiation se dissipe vite dehors (tenue NRBC = protection).', '#9aff4a'); SFX.play('alarm', .5); P.radWarn = true; }
     if (Math.random() < dt * (G.radLv + .4) * 5) SFX.play('click', .3 + Math.min(.4, G.radLv * .15));
-  } else { P.rad = Math.max(0, P.rad - .03 * dt); if (P.radWarn && rl === 0) P.radWarn = false; }
+  } else { P.rad = Math.max(0, P.rad - .55 * dt); if (P.radWarn && rl === 0) P.radWarn = false; }
   if (P.rad > 85) { P.radT = (P.radT || 0) - dt; if (P.radT <= 0) { P.radT = 1; hurtPlayer(2, { pure: true, cause: 'les radiations' }); } }
   if (P.rad >= 100) gameOver('les radiations');
   // régénération
   let reg = 0;
   if (P.hun > 55 && P.thi > 55 && !P.bleed && !P.infect && P.temp > 20 && P.temp < 88 && G.clock - P.lastHurt > 4) reg = .35;
-  const b = baseAt(P.x, P.y); if (b && !starving) reg += BASE_LEVELS[b.lvl].regen; if (P.hun > 10 && P.thi > 10) reg += armorSum('regen');
+  const b = baseAt(P.x, P.y); if (b && !starving) reg += BASE_LEVELS[b.lvl].regen; if (P.hun > 10 && P.thi > 10) reg += armorSum('regen') + buffOf('regen');
   if (reg > 0 && P.hp < maxHP()) P.hp = Math.min(maxHP(), P.hp + reg * dt);
   if (P.hp > maxHP()) P.hp = maxHP();
   if (P.hun < 20 && !P.hunWarn) { msg('Vous avez faim.', '#e0a050'); P.hunWarn = true; } if (P.hun > 30) P.hunWarn = false;

@@ -46,19 +46,22 @@ function renderPanel() {
   if (panelTab === 'map') drawFullMap();
 }
 function itemDesc(id) {
-  const it = ITEMS[id], p = [it.n, 'Poids ' + it.w + ' kg · valeur ' + (it.v || 1)];
+  const it = ITEMS[id], p = [it.n, descOf('i', id), 'Poids ' + it.w + ' kg · valeur ' + (it.v || 1)];
   if (it.use) { const u = it.use, e = []; if (u.hun) e.push('+' + u.hun + ' faim'); if (u.thi) e.push('+' + u.thi + ' soif'); if (u.hp) e.push('+' + u.hp + ' PV'); if (u.stam) e.push('+' + u.stam + ' endurance'); if (u.buff) e.push(u.buff.n + ' ' + u.buff.t + ' s' + (u.buff.spd ? ' (vitesse +' + Math.round(u.buff.spd * 100) + '%)' : '') + (u.buff.dmg ? ' (dégâts +' + Math.round(u.buff.dmg * 100) + '%)' : '')); if (u.temp) e.push('+' + u.temp + ' chaleur'); if (u.rad) e.push(u.rad + ' radiation'); if (u.cure) e.push('soigne : ' + u.cure.join(', ')); if (u.sick) e.push('risque d\'intoxication ' + Math.round(u.sick * 100) + ' %'); p.push(e.join(' · ')); }
   if (it.t === 'ammo') p.push('Munition'); if (it.t === 'gadget') p.push('Gadget : touches G / F'); if (it.t === 'mod') p.push('Module d\'arme (onglet Améliorations)'); if (it.t === 'plan') p.push('Apprendre pour débloquer des recettes');
   return p.join('\n');
 }
+let scrapArmed = null;
+function scrapBtnArmed(k) { return scrapArmed && scrapArmed.k === k && performance.now() - scrapArmed.t < 2600; }
+function scrapConfirm(k) { if (scrapBtnArmed(k)) { scrapArmed = null; return true; } scrapArmed = { k, t: performance.now() }; setTimeout(() => { if (scrapArmed && scrapArmed.k === k) { scrapArmed = null; if (panelOpen && panelOpen()) renderPanel(); } }, 2700); return false; }
 function itemRow(id, n, extra) {
-  const it = ITEMS[id];
-  return '<div class="item" title="' + esc(itemDesc(id)) + '"><span class="ic">' + it.i + '</span><span class="nm">' + esc(it.n) + '</span><span class="ct">x' + n + '</span>' + (extra || '') + '</div>';
+  const it = ITEMS[id], fx = itemEffects(id), sy = scrapable('i', id) ? scrapYield('i', id, null, true) : null;
+  return '<div class="item" title="' + esc(itemDesc(id)) + '"><span class="ic">' + it.i + '</span><span class="nm">' + esc(it.n) + '<br><small class="desc">' + esc(descOf('i', id)) + (fx ? ' <b>' + esc(fx) + '</b>' : '') + (sy ? ' <span class="scr">♻ ' + scrapText(sy) + '</span>' : '') + '</small></span><span class="ct">x' + n + '</span>' + (extra || '') + '</div>';
 }
 function invHTML() {
   const wt = invWeight(), cap = invCap();
   let h = '<div class="cols"><div class="col"><h3>Sac <small>(' + wt.toFixed(1) + ' / ' + cap + ' kg)</small></h3><div class="list">';
-  const groups = { food: 'Nourriture', drink: 'Boissons', med: 'Soins', ammo: 'Munitions', gadget: 'Gadgets', mod: 'Modules', plan: 'Plans', res: 'Ressources', bait: 'Divers' };
+  const groups = { food: 'Nourriture', drink: 'Boissons', med: 'Soins', ammo: 'Munitions', gadget: 'Gadgets', mod: 'Modules', plan: 'Plans', res: 'Ressources', junk: 'Débris (à démonter)', treasure: 'Objets de valeur (à vendre)', bait: 'Divers' };
   for (const g in groups) {
     const ids = Object.keys(P.inv).filter(k => ITEMS[k].t === g && P.inv[k] > 0); if (!ids.length) continue;
     h += '<div class="grp">' + groups[g] + '</div>';
@@ -66,6 +69,7 @@ function invHTML() {
       const it = ITEMS[id]; let btn = '';
       if (it.use && (it.t === 'food' || it.t === 'drink' || it.t === 'med')) btn = '<button data-act="use" data-a="' + id + '">Utiliser</button>';
       else if (it.t === 'plan') btn = '<button data-act="plan" data-a="' + id + '">Apprendre</button>';
+      if (scrapable('i', id)) btn += '<button class="sm" data-act="scrapitem" data-a="' + id + '" title="Démonter en ressources">♻</button>';
       h += itemRow(id, P.inv[id], btn + '<button class="sm" data-act="drop" data-a="' + id + '" title="Jeter">🗑</button>');
     }
   }
@@ -74,19 +78,19 @@ function invHTML() {
   P.slots.forEach((w, i) => {
     if (w) {
       const b = WEAPONS[w.id]; const att = Object.keys(w.att).filter(k => w.att[k]).map(k => ITEMS[w.att[k]].i).join('');
-      h += '<div class="item gear' + (i === P.sel ? ' sel' : '') + '"><span class="ic">' + b.i + '</span><span class="nm">' + (i + 1) + '. ' + esc(gearName(w)) + ' ' + att + '<br>' + durHTML(w) + '<br><small>' + gunStatText(w) + '</small></span><button class="sm" data-act="unslot" data-a="' + i + '">Ranger</button></div>';
+      h += '<div class="item gear' + (i === P.sel ? ' sel' : '') + '"><span class="ic">' + b.i + '</span><span class="nm">' + (i + 1) + '. ' + esc(gearName(w)) + ' ' + att + '<br>' + durHTML(w) + '<br><small class="desc">' + esc(descOf('w', w.id)) + '</small><br><small>' + gunStatText(w) + '</small></span><button class="sm" data-act="scrapslot" data-a="' + i + '" title="' + (scrapBtnArmed('s' + i) ? 'Cliquez à nouveau pour confirmer' : 'Démonter : ' + scrapText(scrapYield('w', w.id, w, true))) + '">' + (scrapBtnArmed('s' + i) ? '⚠' : '♻') + '</button><button class="sm" data-act="unslot" data-a="' + i + '">Ranger</button></div>';
     } else h += '<div class="item empty">' + (i + 1) + '. — emplacement vide —</div>';
   });
   h += '</div><h3>Armure</h3><div class="list">';
   for (const slot of ['head', 'body', 'hands', 'feet', 'back']) {
     const g = P.armor[slot], nm = { head: 'Tête', body: 'Torse', hands: 'Mains', feet: 'Pieds', back: 'Dos' }[slot];
-    h += g ? '<div class="item gear"><span class="ic">' + ARMOR[g.id].i + '</span><span class="nm">' + nm + ' : ' + esc(gearName(g)) + '<br><small>Armure ' + (ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1))).toFixed(1) + armorExtra(g) + '</small></span><button class="sm" data-act="unarmor" data-a="' + slot + '">Retirer</button></div>' : '<div class="item empty">' + nm + ' : —</div>';
+    h += g ? '<div class="item gear"><span class="ic">' + ARMOR[g.id].i + '</span><span class="nm">' + nm + ' : ' + esc(gearName(g)) + '<br><small class="desc">' + esc(descOf('a', g.id)) + '</small><br><small>Armure ' + (ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1))).toFixed(1) + armorExtra(g) + '</small></span><button class="sm" data-act="unarmor" data-a="' + slot + '">Retirer</button></div>' : '<div class="item empty">' + nm + ' : —</div>';
   }
   h += '<p class="mut">Chaleur : +' + armorWarmth().toFixed(0) + ' · Protection radiation : ' + Math.round(radResist() * 100) + '%</p><p class="mut">Armure totale : ' + armorValue().toFixed(1) + ' → réduction ' + Math.round(armorValue() / (armorValue() + 30) * 100) + '% des dégâts</p>';
   h += '<h3>Réserve d\'équipement</h3><div class="list">';
   if (!P.gear.length) h += '<p class="mut">Aucun équipement en réserve.</p>';
   P.gear.forEach((g, i) => {
-    h += '<div class="item gear"><span class="ic">' + gearIcon(g) + '</span><span class="nm">' + esc(gearName(g)) + (g.kind === 'a' ? '<br><small>Armure ' + (ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1))).toFixed(1) + armorExtra(g) + '</small>' : '<br><small>' + gunStatText(g) + '</small>') + '</span><button data-act="equip" data-a="' + i + '">Équiper</button><button class="sm" data-act="dropgear" data-a="' + i + '">🗑</button></div>';
+    h += '<div class="item gear"><span class="ic">' + gearIcon(g) + '</span><span class="nm">' + esc(gearName(g)) + '<br><small class="desc">' + esc(descOf(g.kind, g.id)) + '</small>' + (g.kind === 'a' ? '<br><small>Armure ' + (ARMOR[g.id].ar * (1 + .2 * (g.lvl - 1))).toFixed(1) + armorExtra(g) + '</small>' : '<br><small>' + gunStatText(g) + '</small>') + '</span><button data-act="equip" data-a="' + i + '">Équiper</button><button class="sm" data-act="scrapgear" data-a="' + i + '" title="' + (scrapBtnArmed('g' + i) ? 'Cliquez à nouveau pour confirmer' : 'Démonter : ' + scrapText(scrapYield(g.kind, g.id, g, true))) + '">' + (scrapBtnArmed('g' + i) ? '⚠' : '♻') + '</button><button class="sm" data-act="dropgear" data-a="' + i + '">🗑</button></div>';
   });
   h += '</div></div></div>';
   return h;
@@ -113,11 +117,12 @@ function craftHTML() {
   for (const r of RECIPES.filter(r => r.cat === craftCat)) {
     const known = !r.plan || P.known[r.plan], cost = costOf(r.cost), ok = hasItems(cost), st = nearStation(r.st);
     const idx = RECIPES.indexOf(r);
-    h += '<div class="item recipe' + (known ? '' : ' locked') + '"><span class="ic">' + recIcon(r) + '</span><span class="nm">' + esc(r.name) + (r.st ? ' <small>(' + (r.st === 'workbench' ? 'établi' : 'feu') + ')</small>' : '') + '<br><small class="cost">' + Object.keys(cost).map(k => '<span class="' + (invCount(k) >= cost[k] ? 'ok' : 'no') + '">' + ITEMS[k].i + ' ' + invCount(k) + '/' + cost[k] + '</span>').join(' ') + '</small></span>' +
+    h += '<div class="item recipe' + (known ? '' : ' locked') + '"><span class="ic">' + recIcon(r) + '</span><span class="nm">' + esc(r.name) + (r.st ? ' <small>(' + (r.st === 'workbench' ? 'établi' : 'feu') + ')</small>' : '') + '<br><small class="desc">' + esc(recDesc(r)) + '</small><br><small class="cost">' + Object.keys(cost).map(k => '<span class="' + (invCount(k) >= cost[k] ? 'ok' : 'no') + '">' + ITEMS[k].i + ' ' + invCount(k) + '/' + cost[k] + '</span>').join(' ') + '</small></span>' +
       (known ? '<button data-act="craft" data-a="' + idx + '"' + (ok && st ? '' : ' disabled') + '>' + (st ? 'Fabriquer' : 'Station requise') + '</button>' : '<span class="mut">🔒 ' + PLAN_NAMES[r.plan] + '</span>') + '</div>';
   }
   return h + '</div>';
 }
+function recDesc(r) { const [k, id] = r.out.split(':'); if (k === 'v') return 'Véhicule : ' + VEH[id].n + ' (E pour monter, X pour l\'entretenir).'; if (k === 'p') return 'Sac à dos : augmente votre capacité de transport.'; const fx = k === 'i' ? itemEffects(id) : statLine(k, id); return descOf(k, id) + (fx ? ' — ' + fx : ''); }
 function recIcon(r) { const [k, id] = r.out.split(':'); return k === 'v' ? VEH[id].i : k === 'i' ? ITEMS[id].i : k === 'w' ? WEAPONS[id].i : k === 'a' ? ARMOR[id].i : '🎒'; }
 function doCraft(idx) {
   const r = RECIPES[idx]; if (!r) return; if (r.plan && !P.known[r.plan]) return;
@@ -287,7 +292,7 @@ function tradeHTML() {
     const [k, id, qty, price] = s; const pr = Math.round(price * discount());
     const it = k === 'i' ? ITEMS[id] : k === 'w' ? WEAPONS[id] : ARMOR[id];
     const owned = k === 'i' && ITEMS[id].t === 'plan' && P.known[ITEMS[id].plan];
-    h += '<div class="item"><span class="ic">' + it.i + '</span><span class="nm">' + esc(it.n) + (qty > 1 ? ' x' + qty : '') + '</span><span class="ct">🪙' + pr + '</span><button data-act="buy" data-a="' + i + '"' + (invCount('caps') >= pr && !owned ? '' : ' disabled') + '>' + (owned ? 'Appris' : 'Acheter') + '</button></div>';
+    h += '<div class="item"><span class="ic">' + it.i + '</span><span class="nm">' + esc(it.n) + (qty > 1 ? ' x' + qty : '') + '<br><small class="desc">' + esc(descOf(k, id)) + '</small></span><span class="ct">🪙' + pr + '</span><button data-act="buy" data-a="' + i + '"' + (invCount('caps') >= pr && !owned ? '' : ' disabled') + '>' + (owned ? 'Appris' : 'Acheter') + '</button></div>';
   });
   h += '</div><h3>Vendre</h3><div class="list">';
   const ks = Object.keys(P.inv).filter(k => P.inv[k] > 0 && k !== 'caps' && ITEMS[k].t !== 'plan');
@@ -305,6 +310,9 @@ const ACT = {
   plan(a) { usePlan(a); renderPanel(); },
   drop(a) { const n = P.inv[a] || 0; if (!n) return; invTake(a, n); dropPickup(P.x + 30, P.y, a, n); msg('Jeté : ' + ITEMS[a].n + ' x' + n, '#aaa'); renderPanel(); },
   dropgear(a) { const g = P.gear.splice(+a, 1)[0]; if (g) { dropPickup(P.x + 30, P.y, null, 1, { kind: g.kind, id: g.id }); } renderPanel(); },
+  scrapitem(a) { doScrapItem(a); renderPanel(); },
+  scrapslot(a) { const w = P.slots[+a]; if (!w) return; if (!scrapConfirm('s' + a)) return renderPanel(); if (P.slots.filter(Boolean).length <= 1 && false) return; P.slots[+a] = null; if (P.sel === +a) { const i = P.slots.findIndex(Boolean); P.sel = i < 0 ? 0 : i; } doScrapGear(w); renderPanel(); },
+  scrapgear(a) { const g = P.gear[+a]; if (!g) return; if (!scrapConfirm('g' + a)) return renderPanel(); P.gear.splice(+a, 1); doScrapGear(g); renderPanel(); },
   unslot(a) { const w = P.slots[+a]; if (!w) return; P.slots[+a] = null; P.gear.push(w); if (P.sel === +a) { const i = P.slots.findIndex(Boolean); P.sel = i < 0 ? 0 : i; } renderPanel(); },
   unarmor(a) { const g = P.armor[a]; if (g) { P.armor[a] = null; P.gear.push(g); } renderPanel(); },
   equip(a) {
