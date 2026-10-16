@@ -172,13 +172,14 @@ function hurtPlayer(dmg, o) {
   const ar = armorValue();
   let d = o.pure ? dmg : dmg * (1 - ar / (ar + 30));
   if (P.painT > 0) d *= .8;
+  if (o.dot) { P.hp -= d; P.lastHurt = G.clock; if (P.hp <= 0) gameOver(o.cause || 'Les morts-vivants'); return; } // dégâts sur la durée : discrets (pas de secousse, ni de chiffre à chaque tick)
   P.hp -= d; P.hurtT = .3; P.lastHurt = G.clock;
   shake(Math.min(9, 2 + d / 4)); SFX.play('hurt', .8);
   addDmgText(P.x, P.y - 24, '-' + Math.round(d), '#ff6a5a');
   if (o.ang !== undefined && !o.pure) G.dmgInd.push({ a: o.ang + Math.PI, t: .9 });
   hitstop(.03);
   for (let i = 0; i < 4; i++) addPart(P.x, P.y, rnd(-90, 90), rnd(-90, 90), .4, 2, '#b01818');
-  if (o.bleed && Math.random() < o.bleed && !P.bleed) { P.bleed = 1; msg('Vous saignez ! Utilisez un bandage (H).', '#ff6a5a'); }
+  if (o.bleed && Math.random() < o.bleed && !P.bleed) { P.bleed = 1; P.bleedLeft = BLEED_TIME; msg('🩸 Vous saignez (−' + BLEED_DPS + ' PV/s) : bandage (H) ou attendez ~' + BLEED_TIME + ' s.', '#ff6a5a'); }
   if (o.infect && Math.random() < o.infect && !P.infect) { P.infect = 1; msg('Vous êtes infecté ! Il vous faut des antibiotiques.', '#9acd32'); }
   if (P.hp <= 0) gameOver(o.cause || 'Les morts-vivants');
 }

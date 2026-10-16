@@ -1,14 +1,15 @@
 'use strict';
 // ===== Inventaire, statistiques d'armes, XP =====
+const BLEED_DPS = 1.2, BLEED_TIME = 25; // saignement : dégâts/s et durée avant coagulation
 let G = null; // état global de la partie
 let P = null; // joueur
 
 function msg(text, col) {
   if (!G) return;
   const last = G.msgs[G.msgs.length - 1];
-  if (last && last.base === text) { last.n = (last.n || 1) + 1; last.t = text + ' (×' + last.n + ')'; last.life = 7; return; }
-  G.msgs.push({ t: text, base: text, col: col || '#e8e8e8', life: 7 });
-  if (G.msgs.length > 7) G.msgs.shift();
+  if (last && last.base === text) { last.n = (last.n || 1) + 1; last.t = text + ' (×' + last.n + ')'; last.life = 5; return; }
+  G.msgs.push({ t: text, base: text, col: col || '#e8e8e8', life: 5 });
+  if (G.msgs.length > 4) G.msgs.shift();
 }
 function invCount(id) { return P.inv[id] || 0; }
 function invWeight() { let w = 0; for (const k in P.inv) w += (ITEMS[k] ? ITEMS[k].w : 0) * P.inv[k]; return w; }

@@ -23,13 +23,13 @@ function drawHUD(c, time) {
   drawStats(c, W, H, time);
   drawMessages(c, W, H);
   drawToasts(c, W, H);
-  drawHotbar(c, W, H, time);
+  if (!G.buildMode) drawHotbar(c, W, H, time);
   drawClock(c, W, H, time);
   drawCompass(c, W, H, time);
   drawTopBars(c, W, H);
   drawMinimap(c, W, H, time);
   if (P.buff && P.buff.t > 0) { c.font = 'bold 12px sans-serif'; const t = '⚡ ' + P.buff.n + ' ' + Math.ceil(P.buff.t) + 's'; const w = c.measureText(t).width + 18; glass(c, W / 2 - w / 2, H - 104, w, 22, 8, .7); c.fillStyle = '#ffe070'; c.textAlign = 'center'; c.fillText(t, W / 2, H - 88); }
-  drawQuestTracker(c, W, H);
+  if (!G.buildMode) drawQuestTracker(c, W, H);
   drawPrompt(c, W, H, time);
   if (P.veh) drawVehGauge(c, W, H);
   drawBanner(c, W, H);
@@ -81,38 +81,64 @@ function drawScreenFx(c, time) {
 }
 
 // ----- panneau de stats -----
+function miniBar(c, x, y, w, h, v, max, c1, c2, icon, label, time, lag) { // barre fine : valeur en clair seulement si utile
+  const u = clamp(v / max, 0, 1);
+  c.fillStyle = 'rgba(0,0,0,.5)'; rrect(c, x, y, w, h, h / 2); c.fill();
+  if (lag !== undefined && lag > v) { c.fillStyle = 'rgba(255,230,160,.5)'; rrect(c, x, y, Math.max(h, w * clamp(lag / max, 0, 1)), h, h / 2); c.fill(); }
+  if (u > .002) { const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, c1); g.addColorStop(1, c2); c.fillStyle = g; rrect(c, x, y, Math.max(h, w * u), h, h / 2); c.fill(); }
+  if (u < .25) { const pu = .5 + Math.sin(time * 7) * .5; c.strokeStyle = 'rgba(255,70,60,' + (.35 + pu * .5) + ')'; c.lineWidth = 1.2; rrect(c, x, y, w, h, h / 2); c.stroke(); }
+  c.font = '11px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText(icon, x - 10, y + h / 2 + 1);
+  if (label) { c.font = 'bold 9px sans-serif'; c.textAlign = 'right'; c.lineWidth = 2.5; c.strokeStyle = 'rgba(0,0,0,.65)'; c.strokeText(label, x + w - 5, y + h / 2 + 1); c.fillStyle = '#fff'; c.fillText(label, x + w - 5, y + h / 2 + 1); }
+  c.textBaseline = 'alphabetic';
+}
+function statusList() { // [icône, nom, conseil]
+  const l = [];
+  if (P.bleed) l.push(['🩸', 'Saignement −' + (BLEED_DPS).toFixed(1) + ' PV/s', 'bandage (H)']);
+  if (P.infect) l.push(['☣️', 'Infection', 'antibiotiques']);
+  if (P.sick > 0) l.push(['🤢', 'Intoxication', 'passe seule']);
+  if (P.burn > 0) l.push(['🔥', 'En feu', 'roulez / eau']);
+  if (P.exhausted) l.push(['😮‍💨', 'Essoufflé', 'reprenez votre souffle']);
+  if (P.temp < 30) l.push(['🥶', 'Froid', 'feu / vêtements']);
+  if (P.temp > 80) l.push(['🥵', 'Chaleur', 'ombre / eau']);
+  if (G.radLv > 0) l.push(['☢️', 'Radiations', 'quittez la zone']);
+  if (P.hun <= 0) l.push(['🍖', 'Affamé', 'mangez']);
+  if (P.thi <= 0) l.push(['💧', 'Assoiffé', 'buvez']);
+  return l;
+}
 function drawStats(c, W, H, time) {
-  const rad = P.rad > .5 || (G.radLv || 0) > 0, rows = rad ? 6 : 5, x = 14, w = 238, h = 20 + rows * 21 + 36, y = H - h - 12;
-  glass(c, x, y, w, h, 12, .6);
+  const rad = P.rad > .5 || (G.radLv || 0) > 0, x = 34, w = 176, bh = 10, step = 15;
+  const rows = [['hp'], ['hun'], ['thi'], ['stam']]; if (rad) rows.push(['rad']);
+  const h = 12 + rows.length * step + 16 + 8, y = H - h - 10;
   G.hpLag = G.hpLag === undefined ? P.hp : (G.hpLag > P.hp ? Math.max(P.hp, G.hpLag - (G.hpLag - P.hp) * .035 - .05) : P.hp);
-  const bx = x + 34, bw = w - 48; let by = y + 12;
-  statBar(c, bx, by, bw, 16, P.hp, maxHP(), '#f0584a', '#a8281e', Math.ceil(P.hp) + ' / ' + Math.ceil(maxHP()), '❤️', time, G.hpLag); by += 21;
-  statBar(c, bx, by, bw, 16, P.hun, 100, '#f0a23a', '#b86a14', Math.ceil(P.hun) + '%', '🍖', time); by += 21;
-  statBar(c, bx, by, bw, 16, P.thi, 100, '#4aa8ee', '#1e66a8', Math.ceil(P.thi) + '%', '💧', time); by += 21;
-  statBar(c, bx, by, bw, 16, P.stam, maxStam(), '#5ed88a', '#2a9a58', Math.ceil(P.stam) + '', '⚡', time); by += 21;
-  { // température
-    c.fillStyle = 'rgba(0,0,0,.5)'; rrect(c, bx, by, bw, 16, 8); c.fill();
-    const gr = c.createLinearGradient(bx, 0, bx + bw, 0); gr.addColorStop(0, '#3a7bd5'); gr.addColorStop(.28, '#3aa8a8'); gr.addColorStop(.5, '#5cc060'); gr.addColorStop(.72, '#e0a830'); gr.addColorStop(1, '#e0402a');
-    c.globalAlpha = .8; c.fillStyle = gr; rrect(c, bx + 1, by + 1, bw - 2, 14, 7); c.fill(); c.globalAlpha = 1;
-    const mx = bx + 4 + (bw - 8) * clamp(P.temp / 100, 0, 1); c.fillStyle = '#fff'; c.strokeStyle = 'rgba(0,0,0,.6)'; c.lineWidth = 1; rrect(c, mx - 2, by - 2, 4, 20, 2); c.fill(); c.stroke();
-    c.font = '15px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🌡️', bx - 16, by + 9);
-    c.font = 'bold 10px sans-serif'; c.textAlign = 'left'; c.lineWidth = 2.5; c.strokeStyle = 'rgba(0,0,0,.7)'; c.strokeText(tempLabel() + (P.wet > .3 ? ' · mouillé' : ''), bx + 7, by + 9); c.fillStyle = '#fff'; c.fillText(tempLabel() + (P.wet > .3 ? ' · mouillé' : ''), bx + 7, by + 9); c.textBaseline = 'alphabetic'; by += 21;
+  glass(c, x - 20, y, w + 30, h, 11, .42);
+  const bx = x, by0 = y + 10; let by = by0;
+  for (const [k] of rows) {
+    if (k === 'hp') miniBar(c, bx, by, w, bh + 2, P.hp, maxHP(), '#f0584a', '#a8281e', '❤️', Math.ceil(P.hp) + '', time, G.hpLag);
+    else if (k === 'hun') miniBar(c, bx, by, w, bh, P.hun, 100, '#f0a23a', '#b86a14', '🍖', P.hun < 40 ? Math.ceil(P.hun) + '%' : '', time);
+    else if (k === 'thi') miniBar(c, bx, by, w, bh, P.thi, 100, '#4aa8ee', '#1e66a8', '💧', P.thi < 40 ? Math.ceil(P.thi) + '%' : '', time);
+    else if (k === 'stam') miniBar(c, bx, by, w, bh, P.stam, maxStam(), '#5ed88a', '#2a9a58', '⚡', P.stam < maxStam() * .4 ? Math.ceil(P.stam) + '' : '', time);
+    else miniBar(c, bx, by, w, bh, P.rad, 100, '#b0e040', '#5a8a12', '☢️', Math.ceil(P.rad) + '%' + (G.radLv > 0 ? ' +' + G.radLv.toFixed(1) + '/s' : ''), time);
+    by += step;
   }
-  if (rad) { statBar(c, bx, by, bw, 16, P.rad, 100, '#b0e040', '#5a8a12', Math.ceil(P.rad) + '%' + (G.radLv > 0 ? ' +' + G.radLv.toFixed(1) + '/s' : ''), '☢️', time); by += 21; }
-  // pied : armure, niveau, xp
-  c.font = 'bold 11px sans-serif'; c.textAlign = 'left'; c.fillStyle = '#ddd'; c.fillText('🛡️ ' + armorValue().toFixed(0), x + 12, by + 14);
-  c.fillText('⭐ Niv ' + P.lvl + (P.sp ? '   ✚' + P.sp + ' pt [K]' : ''), x + 66, by + 14);
-  c.fillStyle = 'rgba(255,255,255,.12)'; rrect(c, x + 12, by + 20, w - 24, 5, 2.5); c.fill(); c.fillStyle = '#8ac8ff'; rrect(c, x + 12, by + 20, Math.max(5, (w - 24) * P.xp / xpNeed(P.lvl)), 5, 2.5); c.fill();
-  // statuts
-  let sx = x + 4; c.font = '16px sans-serif'; c.textAlign = 'left';
-  for (const [on, ic] of [[P.bleed, '🩸'], [P.infect, '☣️'], [P.sick > 0, '🤢'], [P.burn > 0, '🔥'], [P.painT > 0, '💊'], [P.exhausted, '😮‍💨'], [P.wet > .3, '💧'], [P.temp < 30, '🥶'], [P.temp > 80, '🥵'], [G.radLv > 0, '☢️']]) if (on) { glass(c, sx, y - 28, 26, 24, 7, .6); c.fillText(ic, sx + 4, y - 10); sx += 29; }
-  G.statsTop = y;
+  // température : discrète, mentionnée seulement hors du confort (et mouillé)
+  const tl = tempLabel(), cold = P.temp < 38, hot = P.temp > 72;
+  c.font = 'bold 9px sans-serif'; c.textAlign = 'left'; c.fillStyle = cold ? '#8ac8ff' : hot ? '#ffb070' : '#9aa8a0';
+  c.fillText((cold ? '🥶 ' : hot ? '🥵 ' : '🌡️ ') + tl + (P.wet > .3 ? ' · mouillé' : '') + '   🛡️' + armorValue().toFixed(0) + '  ⭐' + P.lvl + (P.sp ? ' ✚' + P.sp + ' (K)' : ''), x - 12, by + 8);
+  c.fillStyle = 'rgba(255,255,255,.12)'; rrect(c, x - 12, by + 12, w + 12, 3, 1.5); c.fill(); c.fillStyle = '#8ac8ff'; rrect(c, x - 12, by + 12, Math.max(3, (w + 12) * P.xp / xpNeed(P.lvl)), 3, 1.5); c.fill();
+  // statuts actifs : étiquettes explicites (nom + conseil)
+  const st = statusList(); let sy = y - 6;
+  c.font = 'bold 11px sans-serif'; c.textAlign = 'left';
+  for (const [ic, nm, tip] of st.slice(0, 4)) {
+    const t = ic + ' ' + nm + ' · ' + tip, tw = c.measureText(t).width + 14; sy -= 22;
+    glass(c, x - 20, sy, tw, 19, 7, .6); c.fillStyle = '#ffd0c0'; c.fillText(t, x - 13, sy + 13.5);
+  }
+  G.statsTop = st.length ? sy + 6 : y;
 }
 function drawMessages(c, W, H) {
-  const baseY = (G.statsTop || H - 200) - 40; let my = baseY; c.font = '13px sans-serif'; c.textAlign = 'left';
+  if (G.buildMode) return; const baseY = (G.statsTop || H - 200) - 10; let my = baseY; c.font = '12px sans-serif'; c.textAlign = 'left';
   for (let i = G.msgs.length - 1; i >= 0; i--) {
     const m = G.msgs[i], a = clamp(m.life, 0, 1), w = Math.min(560, c.measureText(m.t).width + 18);
-    c.globalAlpha = a; glass(c, 14, my - 15, w, 21, 7, .5); c.fillStyle = m.col; c.fillText(fitText(c, m.t, 540), 22, my); my -= 24;
+    c.globalAlpha = a; glass(c, 14, my - 14, w, 19, 7, .38); c.fillStyle = m.col; c.fillText(fitText(c, m.t, 540), 22, my); my -= 22;
   }
   c.globalAlpha = 1;
 }
@@ -128,10 +154,11 @@ function drawToasts(c, W, H) {
 
 // ----- hotbar -----
 function drawHotbar(c, W, H, time) {
+  c.save(); c.translate(W / 2, H); c.scale(.84, .84); c.translate(-W / 2, -H);
   const n = 5, bw = 62, gap = 6, tw = n * bw + (n - 1) * gap, x0 = W / 2 - tw / 2, y0 = H - 78;
   for (let i = 0; i < n; i++) {
     const x = x0 + i * (bw + gap), w = P.slots[i], sel = i === P.sel;
-    c.save(); if (sel) { c.translate(x + bw / 2, y0 + 33); c.scale(1.07, 1.07); c.translate(-(x + bw / 2), -(y0 + 33)); }
+    c.save(); if (!w && !sel) c.globalAlpha = .4; if (sel) { c.translate(x + bw / 2, y0 + 33); c.scale(1.07, 1.07); c.translate(-(x + bw / 2), -(y0 + 33)); }
     c.fillStyle = sel ? 'rgba(60,44,16,.85)' : 'rgba(8,12,16,.62)'; rrect(c, x, y0, bw, 60, 8); c.fill();
     c.strokeStyle = sel ? '#ffc850' : 'rgba(255,255,255,.14)'; c.lineWidth = sel ? 2 : 1; rrect(c, x, y0, bw, 60, 8); c.stroke();
     if (sel) { const g = c.createRadialGradient(x + bw / 2, y0 + 30, 4, x + bw / 2, y0 + 30, 40); g.addColorStop(0, 'rgba(255,200,80,.25)'); g.addColorStop(1, 'rgba(255,200,80,0)'); c.fillStyle = g; c.fillRect(x, y0, bw, 60); }
@@ -149,26 +176,28 @@ function drawHotbar(c, W, H, time) {
     c.restore();
   }
   const gl = gadgetList(), gx = x0 + tw + 14;
-  glass(c, gx, y0, 74, 60, 8, .62); c.font = 'bold 10px sans-serif'; c.fillStyle = '#8a949e'; c.textAlign = 'left'; c.fillText('G / F', gx + 5, y0 + 12);
-  if (gl.length) { const id = gl[P.gadSel % gl.length]; c.font = '26px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(ITEMS[id].i, gx + 37, y0 + 34); c.font = 'bold 10px sans-serif'; c.fillStyle = '#ffe9a0'; c.fillText(fitText(c, ITEMS[id].n, 50) + ' ×' + invCount(id), gx + 37, y0 + 53); }
-  else { c.font = '10px sans-serif'; c.fillStyle = '#6a747e'; c.textAlign = 'center'; c.fillText('gadget', gx + 37, y0 + 38); }
+  if (gl.length) { glass(c, gx, y0, 74, 60, 8, .62); c.font = 'bold 10px sans-serif'; c.fillStyle = '#8a949e'; c.textAlign = 'left'; c.fillText('G / F', gx + 5, y0 + 12); const id = gl[P.gadSel % gl.length]; c.font = '26px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(ITEMS[id].i, gx + 37, y0 + 34); c.font = 'bold 10px sans-serif'; c.fillStyle = '#ffe9a0'; c.fillText(fitText(c, ITEMS[id].n, 50) + ' ×' + invCount(id), gx + 37, y0 + 53); }
   // poids + capsules
-  c.font = 'bold 12px sans-serif'; c.textAlign = 'right'; const wt = invWeight(), cap = invCap(); c.fillStyle = wt > cap * .9 ? '#ff8a7a' : '#d8dce0'; c.fillText('🎒 ' + wt.toFixed(0) + '/' + cap, x0 - 12, y0 + 22); c.fillStyle = '#ffd24a'; c.fillText('🪙 ' + invCount('caps'), x0 - 12, y0 + 40);
-  c.font = '10px sans-serif'; c.fillStyle = 'rgba(200,210,220,.55)'; c.textAlign = 'center'; c.fillText('Espace esquive · Maj sprint · Q arme précédente · H soin · Tab sac · B construire · F1 aide', W / 2, H - 8);
+  c.font = 'bold 12px sans-serif'; c.textAlign = 'right'; const wt = invWeight(), cap = invCap(); let cy2 = y0 + 22; if (wt > cap * .7) { c.fillStyle = wt > cap * .9 ? '#ff8a7a' : '#d8dce0'; c.fillText('🎒 ' + wt.toFixed(0) + '/' + cap, x0 - 12, cy2); cy2 += 18; } if (invCount('caps')) { c.fillStyle = '#ffd24a'; c.fillText('🪙 ' + invCount('caps'), x0 - 12, cy2); }
+  if (G.playTime < 100) { c.font = '10px sans-serif'; c.fillStyle = 'rgba(200,210,220,.55)'; c.textAlign = 'center'; c.fillText('Espace esquive · Maj sprint · Q arme précédente · H soin · Tab sac · B construire · F1 aide', W / 2, H - 8); }
+  c.restore();
 }
 
 // ----- heure, météo, boussole -----
 function drawClock(c, W, H, time) {
   const ph = phaseOf(G.clock), w = 250, x = W / 2 - w / 2, y = 8;
-  glass(c, x, y, w, 36, 10, .6);
+  c.save(); c.translate(W / 2, 0); c.scale(.8, .8); c.translate(-W / 2, 0); c.globalAlpha = .85;
+  glass(c, x, y, w, 36, 10, .42);
   c.font = '20px sans-serif'; c.textAlign = 'left'; c.fillText(isNight() ? '🌙' : '☀️', x + 10, y + 25);
   c.font = 'bold 15px sans-serif'; c.fillStyle = '#fff'; c.fillText('Jour ' + G.day, x + 40, y + 17); c.font = '12px sans-serif'; c.fillStyle = '#c8d0d8'; c.fillText(clockText(), x + 40, y + 31);
   if (G.wType !== 'clear') { c.font = '18px sans-serif'; c.fillText(WEATHER[G.wType].i, x + w - 36, y + 24); }
   // piste jour/nuit
   const tx = x + 100, tw = w - 150; const gr = c.createLinearGradient(tx, 0, tx + tw, 0); gr.addColorStop(0, '#2a3a6a'); gr.addColorStop(.08, '#f0a050'); gr.addColorStop(.2, '#f4e08a'); gr.addColorStop(.5, '#f4e08a'); gr.addColorStop(.62, '#f08040'); gr.addColorStop(.72, '#2a3a6a'); gr.addColorStop(1, '#141c3a');
   c.fillStyle = gr; rrect(c, tx, y + 14, tw, 8, 4); c.fill(); const mx = tx + tw * ph; c.fillStyle = '#fff'; c.strokeStyle = 'rgba(0,0,0,.7)'; c.lineWidth = 1.5; c.beginPath(); c.arc(mx, y + 18, 5, 0, TAU); c.fill(); c.stroke();
+  c.restore();
 }
 function drawCompass(c, W, H, time) {
+  const tgq = G.quests.tracked && G.quests.active[G.quests.tracked]; G.compassOn = !!(tutTarget() || tgq || P.veh); if (!G.compassOn) return;
   const w = 380, x = W / 2 - w / 2, y = 50, hd = P.veh ? P.veh.ang : P.ang;
   glass(c, x, y, w, 22, 8, .42); c.save(); rrect(c, x, y, w, 22, 8); c.clip();
   const px = a => x + w / 2 + angDiff(hd, a) / (Math.PI * .6) * (w / 2);
@@ -182,7 +211,7 @@ function drawCompass(c, W, H, time) {
   c.restore(); c.fillStyle = '#ffd86a'; c.beginPath(); c.moveTo(W / 2, y + 22); c.lineTo(W / 2 - 4, y + 28); c.lineTo(W / 2 + 4, y + 28); c.fill();
 }
 function drawTopBars(c, W, H) {
-  let y = 82;
+  let y = G.compassOn ? 82 : 52;
   if (G.assault) {
     const p = G.pois[G.assault.poi]; if (p) { const left = G.assault.mobs.filter(m => !m.dead).length, w = 300; c.fillStyle = 'rgba(110,10,10,.72)'; rrect(c, W / 2 - w / 2, y, w, 26, 8); c.fill(); c.strokeStyle = '#ff5a4a'; c.lineWidth = 1; rrect(c, W / 2 - w / 2, y, w, 26, 8); c.stroke(); c.fillStyle = '#ff9a8a'; c.font = 'bold 12px sans-serif'; c.textAlign = 'center'; c.fillText('⚠ ASSAUT · ' + left + ' assaillants · drapeau ' + Math.max(0, Math.round(p.hpFlag / BASE_LEVELS[p.lvl].hp * 100)) + '%', W / 2, y + 17); y += 32; }
   }
@@ -192,7 +221,7 @@ function drawTopBars(c, W, H) {
 
 // ----- interaction, véhicule, bannière -----
 function drawPrompt(c, W, H, time) {
-  if (G.prompt && !G.paused) {
+  if (G.prompt && !G.paused && !G.buildMode) {
     const t = G.prompt.text; c.font = 'bold 14px sans-serif'; const w = c.measureText(t).width + 56, y = H - 160;
     glass(c, W / 2 - w / 2, y, w, 32, 10, .7);
     c.fillStyle = '#ffd86a'; rrect(c, W / 2 - w / 2 + 8, y + 5, 22, 22, 5); c.fill(); c.fillStyle = '#222'; c.font = 'bold 14px sans-serif'; c.textAlign = 'center'; c.fillText('E', W / 2 - w / 2 + 19, y + 21);
@@ -262,7 +291,7 @@ function mapPoiIcon(c, p, x, y) {
   c.fillStyle = '#fff'; c.fillText(p.def.icon || '•', x, y + 1); c.textBaseline = 'alphabetic';
 }
 function drawMinimap(c, W, H, time) {
-  const S = 160, x0 = W - S - 14, y0 = 14, win = 64;
+  const S = 128, x0 = W - S - 12, y0 = 12, win = 56;
   const RP = realPos(P.x, P.y), tx = RP.x / TS, ty = RP.y / TS, sx = clamp(tx - win / 2, 0, G.W - win), sy = clamp(ty - win / 2, 0, G.RH - win), k = S / win;
   c.save(); rrect(c, x0, y0, S, S, 12); c.clip(); c.fillStyle = '#0a0e12'; c.fillRect(x0, y0, S, S);
   c.imageSmoothingEnabled = false; c.drawImage(G.mini, sx, sy, win, win, x0, y0, S, S);
@@ -283,8 +312,9 @@ function drawMinimap(c, W, H, time) {
 function drawQuestTracker(c, W, H) {
   const id = G.quests.tracked; if (!id || !G.quests.active[id]) return;
   const st = G.quests.active[id], q = questDef(id, st); if (!q) return;
-  const w = 244, x = W - w - 14, y = 14 + 160 + 10;
+  const w = 220, x = W - w - 12, y = 12 + 128 + 8;
   const lines = [{ t: q.title, bold: 1 }].concat(st.ready ? [{ t: '✔ Terminée — voir ' + ({ mara: 'Mara', doc: 'Dr Lin', jonas: 'Jonas' }[q.giver] || '?'), col: '#8affb0' }] : q.objs.map(o => { const p = objProgress(o, st); return { t: (p.cur >= p.need ? '✔ ' : '• ') + p.text + (p.need > 1 ? ' (' + Math.min(p.cur, p.need) + '/' + p.need + ')' : ''), col: p.cur >= p.need ? '#8affb0' : '#e0e4e8' }; }));
-  glass(c, x, y, w, 14 + lines.length * 17, 9, .55); c.textAlign = 'left'; let yy = y + 19;
+  if (lines.length > 2) { const k = lines.findIndex((l, i) => i > 0 && l.t.startsWith('•')); const keep = lines[k > 0 ? k : 1]; lines.length = 1; lines.push(keep); }
+  glass(c, x, y, w, 12 + lines.length * 16, 9, .4); c.textAlign = 'left'; let yy = y + 17;
   for (const l of lines) { c.font = (l.bold ? 'bold ' : '') + '12px sans-serif'; c.fillStyle = l.col || '#ffe070'; c.fillText(fitText(c, l.t, w - 18), x + 9, yy); yy += 17; }
 }

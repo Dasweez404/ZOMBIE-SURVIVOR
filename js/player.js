@@ -183,17 +183,17 @@ function survivalTick(dt) {
   P.hun = Math.max(0, P.hun - .068 * dm.hun * endm * sickM * dt * (P.sprint ? 1.5 : 1));
   P.thi = Math.max(0, P.thi - .105 * dm.hun * endm * sickM * hotM * dt * (P.sprint ? 1.6 : 1));
   const starving = P.hun <= 0 || P.thi <= 0;
-  if (starving) { P.starveT = (P.starveT || 0) - dt; if (P.starveT <= 0) { P.starveT = 1; hurtPlayer(2, { pure: true, cause: P.thi <= 0 ? 'la soif' : 'la faim' }); } }
-  if (P.bleed) { P.bleedT = (P.bleedT || 0) - dt; if (P.bleedT <= 0) { P.bleedT = 1; hurtPlayer(1.6, { pure: true, cause: 'une hémorragie' }); addDecal(P.x, P.y, rnd(2, 4), '#8a1010'); } }
-  if (P.infect) { P.infT = (P.infT || 0) - dt; if (P.infT <= 0) { P.infT = 2; hurtPlayer(1.2, { pure: true, cause: 'l\'infection' }); } }
-  if (P.sick > 0) { P.sick -= dt; P.sickT = (P.sickT || 0) - dt; if (P.sickT <= 0) { P.sickT = 3; hurtPlayer(1, { pure: true, cause: 'une intoxication' }); } }
+  if (starving) { P.starveT = (P.starveT || 0) - dt; if (P.starveT <= 0) { P.starveT = 1; hurtPlayer(2, { pure: true, dot: true, cause: P.thi <= 0 ? 'la soif' : 'la faim' }); } }
+  if (P.bleed) { if (P.bleedLeft === undefined) P.bleedLeft = BLEED_TIME; P.bleedLeft -= dt; if (P.bleedLeft <= 0) { P.bleed = 0; P.bleedLeft = undefined; msg('Le saignement s\'arrête de lui-même.', '#9fd69f'); } P.bleedT = (P.bleedT || 0) - dt; if (P.bleedT <= 0) { P.bleedT = 1; hurtPlayer(BLEED_DPS, { pure: true, dot: true, cause: 'une hémorragie' }); addDecal(P.x, P.y, rnd(2, 4), '#8a1010'); } }
+  if (P.infect) { P.infT = (P.infT || 0) - dt; if (P.infT <= 0) { P.infT = 2; hurtPlayer(1.2, { pure: true, dot: true, cause: 'l\'infection' }); } }
+  if (P.sick > 0) { P.sick -= dt; P.sickT = (P.sickT || 0) - dt; if (P.sickT <= 0) { P.sickT = 3; hurtPlayer(1, { pure: true, dot: true, cause: 'une intoxication' }); } }
   // température
   const target = 50 + ambientTemp() + armorWarmth();
   const rainy = (G.wType === 'rain' || G.wType === 'storm') && G.wInt > .3 && !G.inside && !(P.veh && P.veh.def.closed);
   if (rainy) P.wet = Math.min(1, P.wet + dt * .045 * G.wInt * (1 - Math.min(.9, armorSum('wet')))); else P.wet = Math.max(0, P.wet - dt * (P.nearFire ? .12 : .025));
   if (P.wet > .6 && !P.wetWarn) { msg('💧 Vous êtes trempé : abritez-vous ou séchez-vous près d\'un feu.', '#8ac8ff'); P.wetWarn = true; } if (P.wet < .2) P.wetWarn = false;
   P.temp = clamp(P.temp + (target - P.temp) * Math.min(1, .035 * dt), 0, 100);
-  if (P.temp < 15 || P.temp > 93) { P.tempT = (P.tempT || 0) - dt; if (P.tempT <= 0) { P.tempT = 1; hurtPlayer(1.3, { pure: true, cause: P.temp < 15 ? 'le froid' : 'la chaleur' }); } }
+  if (P.temp < 15 || P.temp > 93) { P.tempT = (P.tempT || 0) - dt; if (P.tempT <= 0) { P.tempT = 1; hurtPlayer(1.3, { pure: true, dot: true, cause: P.temp < 15 ? 'le froid' : 'la chaleur' }); } }
   if (P.temp < 30 && !P.coldWarn) { msg('🥶 Vous avez froid ! Approchez-vous d\'un feu, couvrez-vous.', '#8ac8ff'); P.coldWarn = true; } if (P.temp > 38) P.coldWarn = false;
   if (P.temp > 80 && !P.hotWarn) { msg('🥵 Il fait très chaud ! Cherchez l\'ombre/les bâtiments, enlevez des couches, buvez.', '#ff9a6a'); P.hotWarn = true; } if (P.temp < 72) P.hotWarn = false;
   // radiations
@@ -203,7 +203,7 @@ function survivalTick(dt) {
     if (!P.radWarn) { msg('☢️ Zone radioactive : quittez-la, la radiation se dissipe vite dehors (tenue NRBC = protection).', '#9aff4a'); SFX.play('alarm', .5); P.radWarn = true; }
     if (Math.random() < dt * (G.radLv + .4) * 5) SFX.play('click', .3 + Math.min(.4, G.radLv * .15));
   } else { P.rad = Math.max(0, P.rad - .55 * dt); if (P.radWarn && rl === 0) P.radWarn = false; }
-  if (P.rad > 85) { P.radT = (P.radT || 0) - dt; if (P.radT <= 0) { P.radT = 1; hurtPlayer(2, { pure: true, cause: 'les radiations' }); } }
+  if (P.rad > 85) { P.radT = (P.radT || 0) - dt; if (P.radT <= 0) { P.radT = 1; hurtPlayer(2, { pure: true, dot: true, cause: 'les radiations' }); } }
   if (P.rad >= 100) gameOver('les radiations');
   // régénération
   let reg = 0;
